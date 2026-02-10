@@ -15,3 +15,6 @@ __pycache__/
 
 # IDE (keep or remove if you want)
 .vscode/
+
+# Local secrets
+mcp/.env
