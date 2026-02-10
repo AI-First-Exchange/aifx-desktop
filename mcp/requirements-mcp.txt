@@ -1,0 +1,6 @@
+anyio==4.12.1
+fastmcp==2.14.4
+openapi-pydantic==0.5.1
+pydantic==2.12.5
+pydantic-settings==2.12.0
+pydantic_core==2.41.5

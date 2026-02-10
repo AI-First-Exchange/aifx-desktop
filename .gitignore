@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+
+# Editor / OS junk
+.DS_Store
+*.swp
+*.bak
+*.bak.py
+*.bak2.py
+
+# IDE (keep or remove if you want)
+.vscode/
