@@ -1,54 +1,57 @@
-# AIFX Desktop
+# AI-First Exchange (AIFX)
 
-**AIFX Desktop is the reference converter + validator for the AI-First Exchange (AIFX) standard.**
+**AI-First Exchange (AIFX)** is an open, governance-first container standard for AI-generated media.
 
-It packages AI-generated media into verifiable containers and enforces provenance and integrity rules through deterministic validation.
-
-> Status: **Active refactor**  
-> Structure is being locked first. Implementation follows.
+It defines how AI-created works are **packaged, declared, and verified** — focusing on **provenance, integrity, and portability**, not ownership claims or legal adjudication.
 
 ---
 
-## What is AIFX?
+## What problem AIFX solves
 
-**AIFX (AI-First Exchange)** is an open container standard for AI-generated media.
+As AI-generated content becomes ubiquitous and AI answers replace traditional search clicks, creators and platforms need a clear way to answer:
 
-An AIFX package bundles:
-- the media asset(s)
-- a `manifest.json` with declared authorship and metadata
-- cryptographic hashes for integrity verification
+- Who is declaring authorship?
+- How was this work generated?
+- Has this package been altered since it was created?
 
-AIFX does **not** attempt to prove originality or ownership.  
-It records **what a creator declares**, and whether the package has been **tampered with**.
+AIFX provides a **defensible, machine-verifiable structure** to answer those questions.
 
 ---
 
-## What this repository contains
+## What AIFX is
 
-This repo focuses on the **desktop tooling layer** of AIFX.
+AIFX is a **container format family** that bundles:
+- AI-generated media assets
+- A structured `manifest.json`
+- Declared authorship and creation context
+- Cryptographic hashes for integrity verification
 
-### Included
-- ✅ AIFM converter (music)
-- ✅ AIFM validator (governance + integrity)
-- 🧪 Early AIFV groundwork
-- 🖥️ Desktop UI (converter + validator)
-- 🧱 Core validation and conversion logic
-- 📄 Lock specs and architecture docs
-
-### Not included
-- ❌ Radio programming metadata (owned by aiRX)
-- ❌ Trust scoring or identity verification (future scope)
-- ❌ Platform moderation logic
+AIFX packages are designed to be:
+- Portable across platforms
+- Verifiable without central authority
+- Honest about what they do *and do not* claim
 
 ---
 
-## Design principles (locked)
+## What AIFX is not
 
-- **SDA only** — Self-Declared Authorship is the only verification tier in v0
-- **Validators do not lie** — packages pass or fail deterministically
-- **No silent assumptions** — required fields are enforced
-- **Structure before features** — governance first, UX second
-- **Portability over platforms** — packages outlive any one service
+- ❌ Not a copyright system
+- ❌ Not proof of originality
+- ❌ Not an identity verification authority
+- ❌ Not a moderation or enforcement platform
+
+AIFX records **Self-Declared Authorship (SDA)** and enforces **structural and integrity rules only**.  
+Trust scoring, identity verification, and enforcement belong to downstream platforms.
+
+---
+
+## Verification philosophy (current scope)
+
+- **SDA only** — Self-Declared Authorship is the sole verification tier in v0
+- **Validators do not lie** — packages deterministically pass or fail
+- **No silent assumptions** — required fields are enforced explicitly
+- **Structure before UX** — governance precedes convenience
+- **Provenance over platforms** — packages must outlive services
 
 ---
 
@@ -59,44 +62,44 @@ This repo focuses on the **desktop tooling layer** of AIFX.
 - **AIFI** — AI-generated images
 - **AIFP** — AI-generated projects
 
-Each format follows the same provenance and integrity model.
+All formats share the same provenance and integrity model.
 
 ---
 
-## Current status
+## Repositories
 
-This workspace is **intentionally incomplete and unstable**.
+- **aifx-desktop**  
+  Converter and validator desktop tooling for AIFX packages.
 
-You should expect:
+Additional repositories will appear as components stabilize.
+
+---
+
+## Status
+
+AIFX is under **active development**.
+
+Expect:
 - refactors
+- evolving specifications
 - breaking changes
-- evolving validation rules
 
-What *is* stable:
-- core governance philosophy
-- validator enforcement model
-- SDA-by-design approach
-
----
-
-## Related projects
-
-- **AIFX Standard** — formal specs and rules
-- **aiRX Radio** — AI-first distribution using AIFX packages
-
-(Links will be added as repos stabilize.)
+What is stable:
+- governance philosophy
+- verification boundaries
+- integrity enforcement model
 
 ---
 
-## Who this is for
+## Stewardship
 
-- Developers building AI media tooling
-- Platforms that need defensible AI provenance
-- Creators who want portable, verifiable AI works
-- Researchers studying AI authorship governance
+AI First Exchange™ (AIFX™) is an open standard stewarded by its original author and community contributors.
+
+Use of the source code or specifications does not grant permission to imply official endorsement or certification beyond what is explicitly documented.
 
 ---
 
-## License
+## Core principle
 
-Open source. Governance-focused. Human-directed by design.
+> **Declare only what you can prove today.  
+> Design for what you can verify tomorrow.**
