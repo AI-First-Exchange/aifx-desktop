@@ -4,6 +4,8 @@
 
 It defines how AI-created works are **packaged, declared, and verified** — focusing on **provenance, integrity, and portability**, not ownership claims or legal adjudication.
 
+> See **VISION.md** for long-term direction and roadmap.
+
 ---
 
 ## What problem AIFX solves
