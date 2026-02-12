@@ -52,15 +52,27 @@ Manifest MUST include (minimum):
 - `verification_tier` (string; MUST be "SDA")
 - `declaration` (string, non-empty; human authorship statement)
 
-### 5.2 Integrity / Hashes
-- Manifest MUST include hashes for all packaged files:
-  - `manifest.json`
-  - primary video file
+### 5.2 Integrity / Hashes (Canonical AIFX)
+- Manifest MUST include integrity metadata at `manifest.integrity`:
+
+  - `integrity.algorithm`: MUST be `"sha256"`
+  - `integrity.manifest_hash_mode`: MUST be `"canonical_excludes_self"`
+  - `integrity.hashed_files`: object mapping `relpath -> { "sha256": "<hex>" }`
+
+- `integrity.hashed_files` MUST include entries for:
+  - the primary video file (e.g., `assets/video.mp4`)
   - `assets/thumb.jpg`
-- Hash algorithm: SHA-256
-- Hashing MUST be deterministic:
-  - hashes computed on raw file bytes as stored in the container
-- Validator MUST FAIL if any required file hash is missing or mismatched.
+  - `manifest.json`
+
+- Hash algorithm:
+  - SHA-256 over the raw file bytes as stored in the container.
+
+#### Canonical manifest hashing
+When `integrity.manifest_hash_mode == "canonical_excludes_self"`:
+- The `manifest.json` hash MUST be computed on the canonical JSON bytes of the manifest **excluding** the `integrity.hashed_files["manifest.json"]` entry to avoid circular dependency.
+
+Validator behavior:
+- MUST FAIL if integrity is missing, malformed, missing required hashes, or any hash mismatches.
 
 ### 5.3 Video Facts (Captured, Not Enforced)
 Converter SHOULD capture video facts in manifest when available:
@@ -77,7 +89,7 @@ Validator MUST FAIL if:
 - any entry path is unsafe (absolute paths, `..`, drive roots, etc.)
 - any required file missing
 - more than one primary video
-- hashes mismatch
+- integrity hash mismatch (tamper detected)
 - manifest missing required identity/governance fields
 
 ## 7. Converter Stance (v0)
