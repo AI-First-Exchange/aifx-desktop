@@ -18,6 +18,38 @@ from ui.desktop.validator_bridge import validate_package_local
 # -----------------------------
 # Constants / helpers
 # -----------------------------
+
+def _format_check_value(k: str, v: object) -> str:
+    # Normalize integrity string values from canonical validator
+    if k == "integrity" and isinstance(v, str):
+        if v.lower() == "ok":
+            return "PASS"
+        if v.lower() == "fail":
+            return "FAIL"
+    return str(v)
+
+
+def _check_bucket(k: str) -> int:
+    # Deterministic grouping order
+    if k.startswith("files."):
+        return 10
+    if k.startswith("security."):
+        return 20
+    if k.startswith(("manifest.", "work.", "author", "contact", "ai_declared", "aifx_version")):
+        return 30
+    if k == "integrity" or k.startswith("integrity."):
+        return 40
+    if k.startswith("info."):
+        return 50
+    return 90
+
+
+def _iter_checks_grouped(checks: dict) -> list[tuple[str, object]]:
+    items = list(checks.items())
+    items.sort(key=lambda kv: (_check_bucket(kv[0]), kv[0]))
+    return items
+
+
 AIFX_PACKAGE_EXTS = (".aifx", ".aifm", ".aifv", ".aifi", ".aifp")
 
 AUDIO_EXTS = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
@@ -473,8 +505,8 @@ class ValidatePanel(QtWidgets.QWidget):
             self.results.appendPlainText(f"[{verdict}] {fp}")
             if checks:
                 self.results.appendPlainText("  Checks:")
-                for k, v in checks.items():
-                    self.results.appendPlainText(f"    - {k}: {v}")
+                for k, v in _iter_checks_grouped(checks):
+                    self.results.appendPlainText(f"    - {k}: {_format_check_value(k, v)}")
             if warnings:
                 self.results.appendPlainText("  Warnings:")
                 for w in warnings:
@@ -785,8 +817,8 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.results.appendPlainText(f"Post-validate: {'PASS' if valid and not errs else 'FAIL'}")
         if checks:
             self.results.appendPlainText("Checks:")
-            for k, vv in checks.items():
-                self.results.appendPlainText(f"  - {k}: {vv}")
+            for k, vv in _iter_checks_grouped(checks):
+                self.results.appendPlainText(f"  - {k}: {_format_check_value(k, vv)}")
         if warns:
             self.results.appendPlainText("Warnings:")
             for w in warns:
