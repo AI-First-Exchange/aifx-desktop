@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Any
+from core.validation.aifv_validator import validate_aifv
 import json
 import zipfile
 import hashlib
@@ -132,6 +133,14 @@ def validate_aifx_package(
 
             manifest = json.loads(z.read("manifest.json").decode("utf-8"))
             results["checks"]["manifest"] = "ok"
+
+            # --- Format-specific rules ---
+            ext = package_path.suffix.lower()
+            if ext == ".aifv":
+                aifv_checks, aifv_errors, aifv_warnings = validate_aifv(z, manifest)
+                results["checks"].update(aifv_checks)
+                results["errors"].extend(aifv_errors)
+                results["warnings"].extend(aifv_warnings)
 
             # --- Basic version ---
             aifx_version = _get_aifx_version(manifest)
