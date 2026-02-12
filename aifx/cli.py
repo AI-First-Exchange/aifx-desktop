@@ -79,6 +79,25 @@ def cmd_pack_aifv(ns: argparse.Namespace) -> int:
     print(f"OK: wrote {out}")
     return 0
 
+def cmd_pack_aifm(ns: argparse.Namespace) -> int:
+    from core.packaging.aifm_packager import build_aifm
+
+    out = Path(ns.out).expanduser().resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    build_aifm(
+        audio_path=Path(ns.audio).expanduser().resolve(),
+        out_path=out,
+        title=ns.title,
+        creator_name=ns.creator_name,
+        creator_contact=ns.creator_contact,
+        declaration=ns.declaration,
+        mode=ns.mode,
+        cover_path=Path(ns.cover).expanduser().resolve() if ns.cover else None,
+    )
+    print(f"OK: wrote {out}")
+    return 0
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aifx", description="AIFX Desktop CLI helpers (v0)")
@@ -101,9 +120,19 @@ def main(argv: list[str] | None = None) -> int:
     p_aifv.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
     p_aifv.set_defaults(fn=cmd_pack_aifv)
 
+    p_aifm = sub.add_parser("pack-aifm", help="Package a single audio track into .aifm")
+    p_aifm.add_argument("--audio", required=True, help="Path to audio (.wav/.mp3/.flac/.m4a/.ogg)")
+    p_aifm.add_argument("--out", required=True, help="Output .aifm path")
+    p_aifm.add_argument("--title", required=True, help="work.title")
+    p_aifm.add_argument("--creator-name", required=True, help="creator.name")
+    p_aifm.add_argument("--creator-contact", required=True, help="creator.contact (email)")
+    p_aifm.add_argument("--declaration", required=True, help="authorship declaration")
+    p_aifm.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
+    p_aifm.add_argument("--cover", default=None, help="optional cover image path")
+    p_aifm.set_defaults(fn=cmd_pack_aifm)
+
     ns = parser.parse_args(argv)
     return int(ns.fn(ns))
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
