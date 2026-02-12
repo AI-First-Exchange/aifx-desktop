@@ -67,16 +67,46 @@ Format: Rule -> Check Key -> PASS/FAIL Condition -> Error Message (on FAIL)
   - fail if: missing/empty
   - error: "declaration missing (required)"
 
-## 4. Integrity / Hashing
-- Rule: hashes present for required files
-  - check: integrity.hashes_present
-  - fail if: any required hash missing
-  - error: "integrity: missing hash for required file"
+## 4. Integrity / Hashing (Canonical AIFX)
+- Rule: integrity section present
+  - check: integrity
+  - fail if: manifest.integrity missing
+  - error: "manifest.integrity missing"
 
-- Rule: hashes match file bytes
-  - check: integrity.hashes_match
-  - fail if: any hash mismatch
-  - error: "integrity: hash mismatch (package may be tampered)"
+- Rule: integrity algorithm is sha256
+  - check: integrity
+  - fail if: integrity.algorithm != "sha256"
+  - error: "Unsupported integrity.algorithm: <value>"
+
+- Rule: integrity.hashed_files present and non-empty
+  - check: integrity
+  - fail if: integrity.hashed_files missing/empty or not an object
+  - error: "integrity.hashed_files missing or empty"
+
+- Rule: required file sha256 present
+  - check: integrity
+  - fail if: any required sha256 missing in integrity.hashed_files
+  - error: "Missing sha256 for <relpath>"
+
+- Rule: file bytes match expected sha256
+  - check: integrity
+  - fail if: any mismatch
+  - error: "Hash mismatch for <relpath>: expected <expected>, got <actual>"
+
+- Rule: manifest.json hash entry exists
+  - check: integrity
+  - fail if: integrity.hashed_files['manifest.json'] missing
+  - error: "integrity.hashed_files['manifest.json'] missing"
+
+- Rule: manifest.json sha256 present
+  - check: integrity
+  - fail if: integrity.hashed_files['manifest.json'].sha256 missing
+  - error: "integrity.hashed_files['manifest.json'].sha256 missing"
+
+- Rule: canonical manifest hash matches when mode is canonical_excludes_self
+  - check: integrity
+  - fail if: mismatch
+  - error: "Hash mismatch for manifest.json: expected <expected>, got <actual>"
 
 ## 5. Informational (Warnings Only in v0)
 - Rule: video facts captured (duration/resolution/fps/codecs)
