@@ -140,8 +140,6 @@ Example JSON structure
 
 ⸻
 
-Validate a folder of packages---
-
 ## Status
 
 AIFX is under **active development**.
