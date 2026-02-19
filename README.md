@@ -136,7 +136,9 @@ Example JSON structure
       "checks": { ... }
     }
   ]
-}⸻
+}
+
+⸻
 
 ## Status
 
