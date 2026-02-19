@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+import json
+from datetime import datetime, timezone
+from typing import Any
+
 from pathlib import Path
 
 from core.validation.validator import validate_aifx_package
@@ -18,6 +22,17 @@ def _iter_packages(path: Path) -> list[Path]:
             pkgs.append(p)
     return sorted(pkgs)
 
+def _json_summary(input_path: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
+    passes = sum(1 for r in results if bool(r.get("valid")) and not (r.get("errors") or []))
+    fails = len(results) - passes
+
+    return {
+        "tool": "aifx",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "input_path": str(input_path),
+        "totals": {"count": len(results), "pass": passes, "fail": fails},
+        "results": results,
+    }
 
 def cmd_validate(ns: argparse.Namespace) -> int:
     target = Path(ns.path).expanduser().resolve()
@@ -33,8 +48,12 @@ def cmd_validate(ns: argparse.Namespace) -> int:
     passes = 0
     fails = 0
 
+    results: list[dict[str, Any]] = []
+
     for p in pkgs:
         r = validate_aifx_package(p, dry_run=True)
+        results.append(r)
+
         ok = bool(r.get("valid")) and not (r.get("errors") or [])
         if ok:
             passes += 1
@@ -57,6 +76,17 @@ def cmd_validate(ns: argparse.Namespace) -> int:
         print("")
 
     print(f"Done. PASS={passes} FAIL={fails}")
+
+    if getattr(ns, "json", False):
+        payload = _json_summary(target, results)
+        blob = json.dumps(payload, indent=2, sort_keys=True)
+
+        jp = getattr(ns, "json_path", None)
+        if jp:
+            Path(jp).expanduser().resolve().write_text(blob, encoding="utf-8")
+        else:
+            print(blob)
+
     return 0 if fails == 0 else 2
 
 
@@ -107,6 +137,10 @@ def main(argv: list[str] | None = None) -> int:
     p_val.add_argument("path", help="Path to a .aif* file or a folder")
     p_val.add_argument("--show-checks", action="store_true", help="Print checks map")
     p_val.add_argument("--show-warnings", action="store_true", help="Print warnings")
+    # --- E) JSON summary output (CI / automation) ---
+    p_val.add_argument("--json", action="store_true", help="Emit machine-readable JSON summary")
+    p_val.add_argument("--json-path", default=None, help="Write JSON summary to a file instead of stdout")
+
     p_val.set_defaults(fn=cmd_validate)
 
     p_aifv = sub.add_parser("pack-aifv", help="Package a video+thumb into .aifv (no transcoding)")
