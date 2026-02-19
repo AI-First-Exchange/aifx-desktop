@@ -82,9 +82,9 @@ The aifx CLI is designed for automation and build systems.
 Validation supports machine-readable output and CI-safe exit codes.
 
 Exit codes
-	•	0 — All packages PASS
-	•	2 — One or more packages FAIL validation
-	•	1 — CLI or input error
+	0 — All packages PASS
+	2 — One or more packages FAIL validation
+	1 — CLI or input error
 
 This allows validation to gate builds and deployments.
 
@@ -93,12 +93,15 @@ python -m aifx validate ./artifacts
 Emit machine-readable JSON (for automation)
 
 To print JSON to stdout (quiet mode implied for clean output):
+
 python -m aifx validate ./artifacts --json
 
 To explicitly suppress human-readable output:
+
 python -m aifx validate ./artifacts --json --quiet
 
 Write JSON report to file (recommended)
+
 python -m aifx validate ./artifacts \
   --json \
   --json-path ./aifx-validation.json
@@ -108,6 +111,7 @@ This preserves human output in the terminal while writing structured results to 
 ⸻
 
 Example: fail build on validation error
+
 python -m aifx validate ./artifacts --json --json-path report.json
 code=$?
 if [ $code -ne 0 ]; then
@@ -118,6 +122,7 @@ fi
 ⸻
 
 Example JSON structure
+
 {
   "tool": "aifx-cli",
   "timestamp": "...",
@@ -127,6 +132,7 @@ Example JSON structure
     "pass": 2,
     "fail": 0
   },
+  
   "results": [
     {
       "package": "...",
