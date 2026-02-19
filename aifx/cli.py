@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 import json
+from core.packaging.aifi_packager import build_aifi
 from datetime import datetime, timezone
 from typing import Any
 
@@ -36,6 +37,12 @@ def _json_summary(input_path: Path, results: list[dict[str, Any]]) -> dict[str, 
 
 def cmd_validate(ns: argparse.Namespace) -> int:
     target = Path(ns.path).expanduser().resolve()
+    quiet = bool(getattr(ns, "quiet", False))
+
+    # If emitting JSON to stdout, suppress human output so redirects stay valid JSON
+    if getattr(ns, "json", False) and not getattr(ns, "json_path", None):
+        quiet = True
+
     if not target.exists():
         print(f"ERROR: not found: {target}", file=sys.stderr)
         return 1
@@ -57,25 +64,30 @@ def cmd_validate(ns: argparse.Namespace) -> int:
         ok = bool(r.get("valid")) and not (r.get("errors") or [])
         if ok:
             passes += 1
-            print(f"[PASS] {p}")
+            if not quiet:
+                print(f"[PASS] {p}")
         else:
             fails += 1
-            print(f"[FAIL] {p}")
-            for e in (r.get("errors") or []):
-                print(f"  - {e}")
+            if not quiet:
+                print(f"[FAIL] {p}")
+                for e in (r.get("errors") or []):
+                    print(f"  - {e}")
 
-        if ns.show_warnings:
+        if ns.show_warnings and not quiet:
             for w in (r.get("warnings") or []):
                 print(f"  ~ {w}")
 
-        if ns.show_checks and (r.get("checks") or {}):
+        if ns.show_checks and not quiet and (r.get("checks") or {}):
             print("  Checks:")
             checks = r.get("checks") or {}
             for k in sorted(checks.keys()):
                 print(f"    - {k}: {checks[k]}")
-        print("")
 
-    print(f"Done. PASS={passes} FAIL={fails}")
+        if not quiet:
+            print("")
+
+    if not quiet:
+        print(f"Done. PASS={passes} FAIL={fails}")
 
     if getattr(ns, "json", False):
         payload = _json_summary(target, results)
@@ -88,7 +100,6 @@ def cmd_validate(ns: argparse.Namespace) -> int:
             print(blob)
 
     return 0 if fails == 0 else 2
-
 
 def cmd_pack_aifv(ns: argparse.Namespace) -> int:
     from core.packaging.aifv_packager import build_aifv
@@ -128,6 +139,18 @@ def cmd_pack_aifm(ns: argparse.Namespace) -> int:
     print(f"OK: wrote {out}")
     return 0
 
+def cmd_pack_aifi(ns):
+    out = build_aifi(
+        image_path=Path(ns.image),
+        out_path=Path(ns.out),
+        title=ns.title,
+        creator_name=ns.creator_name,
+        creator_contact=ns.creator_contact,
+        declaration=ns.declaration,
+        mode=ns.mode,
+    )
+    print(f"[OK] Built AIFI: {out}")
+    return 0
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aifx", description="AIFX Desktop CLI helpers (v0)")
@@ -140,7 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     # --- E) JSON summary output (CI / automation) ---
     p_val.add_argument("--json", action="store_true", help="Emit machine-readable JSON summary")
     p_val.add_argument("--json-path", default=None, help="Write JSON summary to a file instead of stdout")
-
+    p_val.add_argument("--quiet", action="store_true", help="Suppress human-readable output")
+    
     p_val.set_defaults(fn=cmd_validate)
 
     p_aifv = sub.add_parser("pack-aifv", help="Package a video+thumb into .aifv (no transcoding)")
@@ -164,6 +188,16 @@ def main(argv: list[str] | None = None) -> int:
     p_aifm.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
     p_aifm.add_argument("--cover", default=None, help="optional cover image path")
     p_aifm.set_defaults(fn=cmd_pack_aifm)
+
+    p_aifi = sub.add_parser("pack-aifi", help="Package a single image into .aifi")
+    p_aifi.add_argument("--image", required=True, help="Path to image (.png/.jpg/.webp)")
+    p_aifi.add_argument("--out", required=True, help="Output .aifi path")
+    p_aifi.add_argument("--title", required=True, help="work.title")
+    p_aifi.add_argument("--creator-name", required=True, help="creator.name")
+    p_aifi.add_argument("--creator-contact", required=True, help="creator.contact (email)")
+    p_aifi.add_argument("--declaration", required=True, help="authorship declaration")
+    p_aifi.add_argument("--mode", default="human-directed-ai", help="mode")
+    p_aifi.set_defaults(fn=cmd_pack_aifi)
 
     ns = parser.parse_args(argv)
     return int(ns.fn(ns))
