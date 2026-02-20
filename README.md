@@ -163,6 +163,37 @@ What is stable:
 
 ---
 
+## Specifications
+
+The AIFX Desktop tooling implements and validates against the canonical format specifications maintained in the AI-First-Exchange Standard repositories.
+
+Authoritative specs:
+
+- **AIFM (Music)**  
+  https://github.com/AI-First-Exchange/AIFM-Standard/tree/main/spec
+
+- **AIFV (Video)**  
+  https://github.com/AI-First-Exchange/AIFV-Standard/tree/main/spec
+
+- **AIFI (Image)**  
+  https://github.com/AI-First-Exchange/AIFI-Standard/tree/main/spec
+
+- **AIFP (Project)**  
+  https://github.com/AI-First-Exchange/AIFP-Standard/tree/main/spec
+
+### Validation Parity
+
+The Desktop validator mirrors the canonical validation check names defined in each format’s `VALIDATION_CHECK_NAMES_V0.md`.
+
+Specifications define structure and integrity requirements.  
+Tooling enforces those requirements deterministically.
+
+Specs are authoritative.  
+Tooling must not drift.
+
+
+---
+
 ## Stewardship
 
 AI First Exchange™ (AIFX™) is an open standard stewarded by its original author and community contributors.
