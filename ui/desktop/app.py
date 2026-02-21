@@ -12,8 +12,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from core.packaging.aifv_packager import build_aifv
 from ui.desktop.validator_bridge import validate_package_local
-
 
 # -----------------------------
 # Constants / helpers
@@ -264,6 +264,51 @@ class ConvertMusicWorker(QtCore.QObject):
             self.finished.emit((str(out), v))
         except Exception as e:
             self.error.emit(str(e))
+
+class PackAIFVWorker(QtCore.QObject):
+    finished = QtCore.Signal(object)  # payload
+    error = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        video_path: str,
+        thumb_path: str,
+        out_path: str,
+        title: str,
+        creator_name: str,
+        creator_contact: str,
+        declaration: str,
+        mode: str,
+    ) -> None:
+        super().__init__()
+        self.video_path = video_path
+        self.thumb_path = thumb_path
+        self.out_path = out_path
+        self.title = title
+        self.creator_name = creator_name
+        self.creator_contact = creator_contact
+        self.declaration = declaration
+        self.mode = mode
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            out = build_aifv(
+                video_path=Path(self.video_path),
+                thumb_path=Path(self.thumb_path),
+                out_path=Path(self.out_path),
+                title=self.title,
+                creator_name=self.creator_name,
+                creator_contact=self.creator_contact,
+                declaration=self.declaration,
+                mode=self.mode,
+            )
+            # Auto-validate
+            v = validate_package_local(str(out), dry_run=True)
+            self.finished.emit((str(out), v))
+        except Exception as e:
+            self.error.emit(str(e))
+
 
 
 # -----------------------------
@@ -664,7 +709,6 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.ai_system.textChanged.connect(self._refresh_convert_enabled)
         self.confirm_cb.stateChanged.connect(self._refresh_convert_enabled)
 
-        self.reload_defaults()
         self._refresh_convert_enabled()
 
     def _mark_ai_system_touched(self) -> None:
@@ -678,8 +722,8 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         d = load_defaults()
         self.creator_name.setText(d.creator_name)
         self.creator_email.setText(d.creator_email)
-        self.output_dir.setText(d.default_output_dir)
-
+        self.mode.setText(d.default_mode)
+    
     def _on_drop(self, p: str) -> None:
         pp = Path(p)
         if pp.is_dir():
@@ -831,6 +875,276 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.status.setText("Done.")
         self._refresh_convert_enabled()
 
+class PackAIFVPanel(QtWidgets.QWidget):
+    def __init__(self, defaults: AppDefaults) -> None:
+        super().__init__()
+        self._defaults = defaults
+        self._thread: Optional[QtCore.QThread] = None
+        self._worker: Optional[PackAIFVWorker] = None
+
+        self.video_path: Optional[str] = None
+        self.thumb_path: Optional[str] = None
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        title = QtWidgets.QLabel("Package → Video (AIFV)")
+        title.setStyleSheet("font-size: 16px; font-weight: 800;")
+        layout.addWidget(title)
+
+        # --- Pickers row
+        pick_row = QtWidgets.QGridLayout()
+        layout.addLayout(pick_row)
+
+        self.video_lbl = QtWidgets.QLabel("Video:")
+        self.video_path_lbl = QtWidgets.QLabel("—")
+        self.video_path_lbl.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.video_btn = QtWidgets.QPushButton("Browse Video…")
+
+        self.thumb_lbl = QtWidgets.QLabel("Thumbnail:")
+        self.thumb_path_lbl = QtWidgets.QLabel("—")
+        self.thumb_path_lbl.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.thumb_btn = QtWidgets.QPushButton("Browse Thumb…")
+
+        pick_row.setColumnStretch(0, 0)  # labels
+        pick_row.setColumnStretch(1, 1)  # path expands
+        pick_row.setColumnStretch(2, 0)  # buttons fixed
+        pick_row.setHorizontalSpacing(10)
+        pick_row.setVerticalSpacing(10)
+
+        self.video_path_lbl.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.thumb_path_lbl.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+
+        pick_row.addWidget(self.video_lbl, 0, 0)
+        pick_row.addWidget(self.video_path_lbl, 0, 1)
+        pick_row.addWidget(self.video_btn, 0, 2)
+
+        pick_row.addWidget(self.thumb_lbl, 1, 0)
+        pick_row.addWidget(self.thumb_path_lbl, 1, 1)
+        pick_row.addWidget(self.thumb_btn, 1, 2)
+
+        self.video_btn.clicked.connect(self._browse_video)
+        self.thumb_btn.clicked.connect(self._browse_thumb)
+
+        self.video_btn.setMinimumWidth(160)
+        self.thumb_btn.setMinimumWidth(160)
+
+        # --- Form
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+
+        # Make the right column expand (important)
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+
+        self.work_title = QtWidgets.QLineEdit()
+        self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
+        self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
+        self.mode = QtWidgets.QLineEdit(defaults.default_mode)
+
+        self.declaration = QtWidgets.QPlainTextEdit()
+        self.declaration.setPlaceholderText("Human-authored declaration (required).")
+        self.declaration.setMinimumHeight(160)  # make it feel intentional
+
+        # Make inputs expand like the big declaration area
+        for w in (self.work_title, self.creator_name, self.creator_contact, self.mode):
+            w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+            w.setMinimumWidth(520)  # tweak 500–650 to taste
+
+        self.out_path = QtWidgets.QLineEdit()
+        self.out_path.setPlaceholderText("Output .aifv path (e.g., ~/Desktop/MyVideo.aifv)")
+        self.out_path.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+
+        form.addRow("Title", self.work_title)
+        form.addRow("Creator Name", self.creator_name)
+        form.addRow("Creator Contact", self.creator_contact)
+        form.addRow("Mode", self.mode)
+        form.addRow("Declaration", self.declaration)
+
+        # Output row with browse button
+        self.out_btn = QtWidgets.QPushButton("Browse…")
+        self.out_btn.setMinimumWidth(120)
+        self.out_btn.clicked.connect(self._browse_out)
+
+        out_row = QtWidgets.QHBoxLayout()
+        out_row.setContentsMargins(0, 0, 0, 0)
+        out_row.addWidget(self.out_path, 1)
+        out_row.addWidget(self.out_btn)
+
+        form.addRow("Output .aifv", out_row)
+
+        # --- Buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        layout.addLayout(btn_row)
+
+        self.pack_btn = QtWidgets.QPushButton("Package AIFV")
+        self.pack_btn.setEnabled(False)
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.pack_btn)
+
+        self.pack_btn.clicked.connect(self.run_pack)
+
+        # --- Results
+        self.results = QtWidgets.QPlainTextEdit()
+        self.results.setReadOnly(True)
+        self.results.setMinimumHeight(220)
+        layout.addWidget(self.results)
+
+        self.status = QtWidgets.QLabel("")
+        self.status.setStyleSheet("opacity: 0.85;")
+        layout.addWidget(self.status)
+
+        self._refresh_enabled()
+
+        # Live refresh
+        self.work_title.textChanged.connect(self._refresh_enabled)
+        self.creator_name.textChanged.connect(self._refresh_enabled)
+        self.creator_contact.textChanged.connect(self._refresh_enabled)
+        self.out_path.textChanged.connect(self._refresh_enabled)
+        self.declaration.textChanged.connect(self._refresh_enabled)
+
+    def reload_defaults(self) -> None:
+        d = load_defaults()
+
+        # If you have these fields in the panel, populate them.
+        # Adjust names to match your widgets.
+        if hasattr(self, "creator_name"):
+            self.creator_name.setText(d.creator_name)
+        if hasattr(self, "creator_email"):
+            self.creator_email.setText(d.creator_email)
+        if hasattr(self, "output_dir"):
+            self.output_dir.setText(d.default_output_dir)
+
+        # Only do this if your panel actually has a mode widget
+        if hasattr(self, "mode"):
+            try:
+                self.mode.setText(d.default_mode)
+            except Exception:
+                pass
+
+    def _browse_video(self) -> None:
+        fp, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Select video", str(Path.home()), "Video (*.mp4 *.mov *.webm *.m4v);;All files (*)"
+        )
+        if fp:
+            self.video_path = fp
+            self.video_path_lbl.setText(fp)
+            self._refresh_enabled()
+
+    def _browse_thumb(self) -> None:
+        fp, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Select thumbnail", str(Path.home()), "Image (*.jpg *.jpeg *.png *.webp);;All files (*)"
+        )
+        if fp:
+            self.thumb_path = fp
+            self.thumb_path_lbl.setText(fp)
+            self._refresh_enabled()
+
+    def _browse_out(self) -> None:
+        # Default directory: whatever is in the box, else defaults output dir, else home
+        start_dir = str(Path.home())
+        try:
+            cur = self.out_path.text().strip()
+            if cur:
+                start_dir = str(Path(cur).expanduser().resolve().parent)
+            elif hasattr(self, "_defaults") and getattr(self._defaults, "default_output_dir", ""):
+                start_dir = str(Path(self._defaults.default_output_dir).expanduser().resolve())
+        except Exception:
+            pass
+
+        fp, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save AIFV package as…",
+            str(Path(start_dir) / "video.aifv"),
+            "AIFV Package (*.aifv);;All files (*)",
+        )  
+        if fp:
+            if not fp.lower().endswith(".aifv"):
+                fp += ".aifv"
+            self.out_path.setText(fp)
+            self._refresh_enabled()
+
+    def _refresh_enabled(self) -> None:
+        ok = True
+        ok = ok and bool(self.video_path)
+        ok = ok and bool(self.thumb_path)
+        ok = ok and bool(self.work_title.text().strip())
+        ok = ok and bool(self.creator_name.text().strip())
+        ok = ok and bool(self.creator_contact.text().strip())
+        ok = ok and bool(self.out_path.text().strip())
+        ok = ok and bool(self.declaration.toPlainText().strip())
+        self.pack_btn.setEnabled(ok)
+
+    def run_pack(self) -> None:
+        self.results.clear()
+        self.results.appendPlainText("Packaging to .aifv…")
+        self.pack_btn.setEnabled(False)
+
+        outp = _abs(self.out_path.text().strip())
+
+        self._thread = QtCore.QThread(self)
+        self._worker = PackAIFVWorker(
+            video_path=str(self.video_path),
+            thumb_path=str(self.thumb_path),
+            out_path=outp,
+            title=self.work_title.text().strip(),
+            creator_name=self.creator_name.text().strip(),
+            creator_contact=self.creator_contact.text().strip(),
+            declaration=self.declaration.toPlainText().strip(),
+            mode=self.mode.text().strip() or "human-directed-ai",
+        )
+        self._worker.moveToThread(self._thread)
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.error.connect(self._on_error)
+
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        self._worker.error.connect(self._thread.quit)
+        self._worker.error.connect(self._worker.deleteLater)
+
+        self._thread.start()
+
+    def _on_error(self, msg: str) -> None:
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"ERROR: {msg}")
+        self.status.setText("Failed.")
+        self._refresh_enabled()
+
+    def _on_finished(self, payload: object) -> None:
+        out_path, v = payload
+
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"[OK] Wrote: {out_path}")
+
+        valid = bool(v.get("valid", False))
+        errs = v.get("errors", []) or []
+        warns = v.get("warnings", []) or []
+        checks = v.get("checks", {}) or {}
+
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"Post-validate: {'PASS' if valid and not errs else 'FAIL'}")
+
+        if checks:
+            self.results.appendPlainText("Checks:")
+            for k, vv in _iter_checks_grouped(checks):
+                self.results.appendPlainText(f"  - {k}: {_format_check_value(k, vv)}")
+
+        if warns:
+            self.results.appendPlainText("Warnings:")
+            for w in warns:
+                self.results.appendPlainText(f"  - {w}")
+
+        if errs:
+            self.results.appendPlainText("Errors:")
+            for e in errs:
+                self.results.appendPlainText(f"  - {e}")
+
+        self.status.setText("Done.")
+        self._refresh_enabled()
+
 class PlaceholderPanel(QtWidgets.QWidget):
     def __init__(self, title_text: str, note: str) -> None:
         super().__init__()
@@ -957,22 +1271,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # Pages
         self.pages = QtWidgets.QStackedWidget()
 
+        defaults = load_defaults()
+
         self.page_home = HomePanel()
         self.page_defaults = DefaultsPanel()
         self.page_validate = ValidatePanel()
         self.page_music = ConvertMusicPanel()
+        self.page_video = PackAIFVPanel(defaults)
 
-        self.page_video = PlaceholderPanel(
-            "Convert → Video",
-            "Not implemented yet. Next step is AIFV converter (embed thumbnail inside .aifv, no separate .aifi).",
-        )
+        # Until you build PackAIFI UI, keep this as placeholder
         self.page_image = PlaceholderPanel(
             "Convert → Image",
-            "Not implemented yet. Next step is AIFI converter mirroring AIFM integrity model.",
+            "Use CLI for now: python -m aifx pack-aifi ...",
         )
+
         self.page_project = PlaceholderPanel(
             "Convert → Project",
-            "Not implemented yet. AIFP packaging rules need a bit of design (entry point, include/exclude).",
+            "Not implemented yet. AIFP packaging rules need design (entry point, include/exclude).",
         )
 
         self.pages.addWidget(self.page_home)      # 0
@@ -1043,7 +1358,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # When defaults saved, refresh convert panels
         self.page_defaults.defaultsSaved.connect(self.page_music.reload_defaults)
-
+        self.page_defaults.defaultsSaved.connect(self.page_video.reload_defaults)
+        
         # Landing
         self._go(0, self.btn_home)
 

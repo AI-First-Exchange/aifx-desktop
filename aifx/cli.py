@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+# --- stdlib ---
 import argparse
-import sys
 import json
-from core.packaging.aifi_packager import build_aifi
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from pathlib import Path
-
+# --- project ---
+from core.packaging.aifi_packager import build_aifi
+from core.packaging.aifm_packager import build_aifm
+from core.packaging.aifv_packager import build_aifv
 from core.validation.validator import validate_aifx_package
 
 AIFX_EXTS = (".aifx", ".aifm", ".aifv", ".aifi", ".aifp")
-
 
 def _iter_packages(path: Path) -> list[Path]:
     if path.is_file():
@@ -102,22 +104,26 @@ def cmd_validate(ns: argparse.Namespace) -> int:
     return 0 if fails == 0 else 2
 
 def cmd_pack_aifv(ns: argparse.Namespace) -> int:
-    from core.packaging.aifv_packager import build_aifv
+    from pathlib import Path
+    from core.packaging.aifv_packager import build_aifv, AIFVInputs
 
-    out = Path(ns.out).expanduser().resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out_path = Path(ns.out).expanduser().resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    build_aifv(
+    inputs = AIFVInputs(
         video_path=Path(ns.video).expanduser().resolve(),
         thumb_path=Path(ns.thumb).expanduser().resolve(),
-        out_path=out,
-        title=ns.title,
-        creator_name=ns.creator_name,
-        creator_contact=ns.creator_contact,
-        declaration=ns.declaration,
-        mode=ns.mode,
+        out_path=out_path,
+        title=str(ns.title),
+        creator_name=str(ns.creator_name),
+        creator_contact=str(ns.creator_contact),
+        declaration=str(ns.declaration),
+        mode=str(ns.mode),
     )
-    print(f"OK: wrote {out}")
+
+    built = build_aifv(inputs)
+
+    print(f"[OK] Built AIFV: {built}")
     return 0
 
 def cmd_pack_aifm(ns: argparse.Namespace) -> int:
