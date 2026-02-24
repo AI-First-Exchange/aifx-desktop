@@ -63,6 +63,10 @@ APP_NAME = "AIFX Desktop"
 def _abs(p: str) -> str:
     return os.path.abspath(os.path.expanduser(p))
 
+def resource_path(rel_path: str) -> str:
+    base = Path(getattr(sys, "_MEIPASS")) if hasattr(sys, "_MEIPASS") else REPO_ROOT
+    return str((base / rel_path).resolve())
+
 
 def collect_packages(selected_files: list[str], selected_folder: str | None = None) -> list[str]:
     files: list[str] = []
@@ -186,7 +190,7 @@ class DropZone(QtWidgets.QFrame):
 
     def __init__(self, label_text: str = "Drop files here") -> None:
         super().__init__()
-        bg = "/Users/JaiSimon1/Desktop/aifxbackground.png"
+        bg = resource_path("ui/desktop/assets/aifxbackground.png")
         self.setStyleSheet(f"QMainWindow {{ background-image: url('{bg}'); background-position: center; background-repeat: repeat; }}")
 
         self.setAcceptDrops(True)
@@ -277,8 +281,11 @@ class PackAIFVWorker(QtCore.QObject):
         title: str,
         creator_name: str,
         creator_contact: str,
-        declaration: str,
         mode: str,
+        primary_tool: str,
+        primary_tool_version: str,
+        supporting_tools: list[str],
+        origin_url: str,
     ) -> None:
         super().__init__()
         self.video_path = video_path
@@ -287,24 +294,38 @@ class PackAIFVWorker(QtCore.QObject):
         self.title = title
         self.creator_name = creator_name
         self.creator_contact = creator_contact
-        self.declaration = declaration
         self.mode = mode
+        self.primary_tool = primary_tool
+        self.primary_tool_version = primary_tool_version
+        self.supporting_tools = supporting_tools
+        self.origin_url = origin_url
 
     @QtCore.Slot()
     def run(self) -> None:
         try:
+            from core.packaging.aifv_packager import AIFVInputs, ProvenanceTool
+
+            supporting = [ProvenanceTool(name=n) for n in self.supporting_tools[:3] if n]
+
             out = build_aifv(
-                video_path=Path(self.video_path),
-                thumb_path=Path(self.thumb_path),
-                out_path=Path(self.out_path),
-                title=self.title,
-                creator_name=self.creator_name,
-                creator_contact=self.creator_contact,
-                declaration=self.declaration,
-                mode=self.mode,
+                AIFVInputs(
+                    video_path=Path(self.video_path),
+                    thumb_path=Path(self.thumb_path),
+                    out_path=Path(self.out_path),
+                    title=self.title,
+                    creator_name=self.creator_name,
+                    creator_contact=self.creator_contact,
+                    mode=self.mode,
+                    primary_tool=ProvenanceTool(
+                        name=self.primary_tool,
+                        version=self.primary_tool_version or None,
+                    ),
+                    supporting_tools=supporting,
+                    origin_url=self.origin_url or None,
+                )
             )
             # Auto-validate
-            v = validate_package_local(str(out), dry_run=True)
+            v = validate_package_local(str(out))
             self.finished.emit((str(out), v))
         except Exception as e:
             self.error.emit(str(e))
@@ -609,7 +630,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.ai_system = QtWidgets.QLineEdit()
 
         self.origin_platform.setPlaceholderText("e.g., Suno, Udio, ElevenLabs, Custom")
-        self.origin_url.setPlaceholderText("https://… (required)")
+        self.origin_url.setPlaceholderText("https://… (optional)")
         self.ai_system.setPlaceholderText("e.g., Suno (required)")
 
         # Convenience: mirror origin platform → ai_system unless user edits ai_system
@@ -682,7 +703,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         form.addRow("Title (required):", title_row)
 
         form.addRow("Origin Platform (required):", self.origin_platform)
-        form.addRow("Origin URL (required):", self.origin_url)
+        form.addRow("Origin URL (optional):", self.origin_url)
         form.addRow("AI System (required):", self.ai_system)
         form.addRow("Persona (optional):", self.persona)
         form.addRow("Cover image (optional):", cover_row)
@@ -774,7 +795,6 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         has_file = bool(self.selected_file)
         req_ok = (
             bool(self.origin_platform.text().strip())
-            and bool(self.origin_url.text().strip())
             and bool(self.ai_system.text().strip())
         )
         confirmed = self.confirm_cb.isChecked()
@@ -940,10 +960,11 @@ class PackAIFVPanel(QtWidgets.QWidget):
         self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
         self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
         self.mode = QtWidgets.QLineEdit(defaults.default_mode)
-
-        self.declaration = QtWidgets.QPlainTextEdit()
-        self.declaration.setPlaceholderText("Human-authored declaration (required).")
-        self.declaration.setMinimumHeight(160)  # make it feel intentional
+        self.primary_tool = QtWidgets.QLineEdit()
+        self.primary_tool_version = QtWidgets.QLineEdit()
+        self.supporting_tools = QtWidgets.QLineEdit()
+        self.origin_url = QtWidgets.QLineEdit()
+        self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
 
         # Make inputs expand like the big declaration area
         for w in (self.work_title, self.creator_name, self.creator_contact, self.mode):
@@ -958,7 +979,10 @@ class PackAIFVPanel(QtWidgets.QWidget):
         form.addRow("Creator Name", self.creator_name)
         form.addRow("Creator Contact", self.creator_contact)
         form.addRow("Mode", self.mode)
-        form.addRow("Declaration", self.declaration)
+        form.addRow("Primary Tool", self.primary_tool)
+        form.addRow("Primary Tool Version", self.primary_tool_version)
+        form.addRow("Supporting Tools", self.supporting_tools)
+        form.addRow("Origin URL", self.origin_url)
 
         # Output row with browse button
         self.out_btn = QtWidgets.QPushButton("Browse…")
@@ -1000,7 +1024,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
         self.creator_name.textChanged.connect(self._refresh_enabled)
         self.creator_contact.textChanged.connect(self._refresh_enabled)
         self.out_path.textChanged.connect(self._refresh_enabled)
-        self.declaration.textChanged.connect(self._refresh_enabled)
+        self.primary_tool.textChanged.connect(self._refresh_enabled)
 
     def reload_defaults(self) -> None:
         d = load_defaults()
@@ -1071,7 +1095,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
         ok = ok and bool(self.creator_name.text().strip())
         ok = ok and bool(self.creator_contact.text().strip())
         ok = ok and bool(self.out_path.text().strip())
-        ok = ok and bool(self.declaration.toPlainText().strip())
+        ok = ok and bool(self.primary_tool.text().strip())
         self.pack_btn.setEnabled(ok)
 
     def run_pack(self) -> None:
@@ -1089,8 +1113,15 @@ class PackAIFVPanel(QtWidgets.QWidget):
             title=self.work_title.text().strip(),
             creator_name=self.creator_name.text().strip(),
             creator_contact=self.creator_contact.text().strip(),
-            declaration=self.declaration.toPlainText().strip(),
             mode=self.mode.text().strip() or "human-directed-ai",
+            primary_tool=self.primary_tool.text().strip(),
+            primary_tool_version=self.primary_tool_version.text().strip(),
+            supporting_tools=[
+                n.strip()
+                for n in self.supporting_tools.text().split(",")
+                if n.strip()
+            ][:3],
+            origin_url=self.origin_url.text().strip(),
         )
         self._worker.moveToThread(self._thread)
 
@@ -1167,12 +1198,13 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
 
         # Background image (window-level, cross-platform safe)
-        bg = "/Users/JaiSimon1/Desktop/aifxbackground.png"
+        bg = resource_path("ui/desktop/assets/aifxbackground.png")
         pm = QtGui.QPixmap(bg)
-        pal = self.palette()
-        pal.setBrush(QtGui.QPalette.Window, QtGui.QBrush(pm))
-        self.setAutoFillBackground(True)
-        self.setPalette(pal)
+        if not pm.isNull():
+            pal = self.palette()
+            pal.setBrush(QtGui.QPalette.Window, QtGui.QBrush(pm))
+            self.setAutoFillBackground(True)
+            self.setPalette(pal)
 
         self.setWindowTitle("AIFX Desktop (v0) — Converter + Validator")
         self.resize(980, 640)
