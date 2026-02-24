@@ -3,11 +3,31 @@ from __future__ import annotations
 import posixpath
 import re
 import zipfile
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 PRIMARY_VIDEO_RE = re.compile(r"^assets/video\.[^/]+$")  # assets/video.*
-THUMB_PATH = "assets/thumb.jpg"
 
+THUMB_ALLOWED = (
+    "assets/thumb.jpg",
+    "assets/thumb.jpeg",
+    "assets/thumb.png",
+    "assets/thumb.webp",
+)
+
+# ----------------------------
+# Thumbnail helper (v0)
+# ----------------------------
+def _pick_single_thumb(namelist: List[str]) -> Optional[str]:
+    thumbs = [p for p in namelist if p in THUMB_ALLOWED]
+
+    if not thumbs:
+        return None
+
+    if len(thumbs) > 1:
+        # Structural violation: only one thumbnail allowed in v0
+        raise ValueError(f"multiple thumbnails present: {thumbs}")
+
+    return thumbs[0]
 
 def _is_unsafe_path(name: str) -> bool:
     """
@@ -85,10 +105,17 @@ def validate_aifv(z: zipfile.ZipFile, manifest: Dict[str, Any]) -> Tuple[Dict[st
         errors.append("security: symlinks are not allowed")
 
     # --- Required files ---
-    thumb_present = THUMB_PATH in names
-    checks["files.thumbnail_present"] = thumb_present
-    if not thumb_present:
-        errors.append("assets/thumb.jpg missing (required)")
+    thumb_rel: Optional[str] = None
+    try:
+        thumb_rel = _pick_single_thumb(list(names))
+    except ValueError as e:
+        # multiple thumbs present
+        checks["files.thumbnail_present"] = False
+        errors.append(str(e))
+    else:
+        checks["files.thumbnail_present"] = bool(thumb_rel)
+        if not thumb_rel:
+            errors.append("assets/thumb.<ext> missing (required)")
 
     primary_videos = [n for n in names if PRIMARY_VIDEO_RE.match(n)]
     primary_ok = (len(primary_videos) == 1)

@@ -105,11 +105,56 @@ def cmd_validate(ns: argparse.Namespace) -> int:
 
 def cmd_pack_aifv(ns: argparse.Namespace) -> int:
     from pathlib import Path
-    from core.packaging.aifv_packager import build_aifv, AIFVInputs
+    from datetime import datetime, timezone
+    from core.packaging.aifv_packager import (
+        build_aifv,
+        AIFVInputs,
+        ProvenanceTool,
+        Attestation,
+    )
 
     out_path = Path(ns.out).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # ----------------------------
+    # Primary tool (REQUIRED)
+    # ----------------------------
+    primary_name = (ns.primary_tool or "").strip()
+    if not primary_name:
+        raise SystemExit("ERROR: --primary-tool is required")
+
+    primary_tool = ProvenanceTool(
+        name=primary_name,
+        version=(ns.primary_tool_version.strip() if ns.primary_tool_version else None),
+    )
+
+    # ----------------------------
+    # Supporting tools (max 3)
+    # ----------------------------
+    supporting_tools = []
+    for tool_name in (ns.supporting_tool or [])[:3]:
+        t = (tool_name or "").strip()
+        if t:
+            supporting_tools.append(ProvenanceTool(name=t))
+
+    # ----------------------------
+    # Optional attestation
+    # ----------------------------
+    attestation = None
+    if getattr(ns, "attest", False):
+        initials = (ns.initials or "").strip()
+        if not initials:
+            raise SystemExit("ERROR: --initials required when using --attest")
+
+        attestation = Attestation(
+            template_id=(ns.template_id or "AIFX-SDA-001").strip(),
+            initials=initials,
+            accepted_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    # ----------------------------
+    # Build inputs
+    # ----------------------------
     inputs = AIFVInputs(
         video_path=Path(ns.video).expanduser().resolve(),
         thumb_path=Path(ns.thumb).expanduser().resolve(),
@@ -117,8 +162,12 @@ def cmd_pack_aifv(ns: argparse.Namespace) -> int:
         title=str(ns.title),
         creator_name=str(ns.creator_name),
         creator_contact=str(ns.creator_contact),
-        declaration=str(ns.declaration),
         mode=str(ns.mode),
+
+        primary_tool=primary_tool,
+        supporting_tools=supporting_tools,
+        origin_url=(ns.origin_url.strip() if ns.origin_url else None),
+        attestation=attestation,
     )
 
     built = build_aifv(inputs)
@@ -127,35 +176,42 @@ def cmd_pack_aifv(ns: argparse.Namespace) -> int:
     return 0
 
 def cmd_pack_aifm(ns: argparse.Namespace) -> int:
+    from pathlib import Path
     from core.packaging.aifm_packager import build_aifm
 
-    out = Path(ns.out).expanduser().resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out_path = Path(ns.out).expanduser().resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     build_aifm(
         audio_path=Path(ns.audio).expanduser().resolve(),
-        out_path=out,
-        title=ns.title,
-        creator_name=ns.creator_name,
-        creator_contact=ns.creator_contact,
-        declaration=ns.declaration,
-        mode=ns.mode,
-        cover_path=Path(ns.cover).expanduser().resolve() if ns.cover else None,
+        out_path=out_path,
+        title=str(ns.title),
+        creator_name=str(ns.creator_name),
+        creator_contact=str(ns.creator_contact),
+        mode=str(ns.mode),
+        cover_path=Path(ns.cover).expanduser().resolve() if getattr(ns, "cover", None) else None,
     )
-    print(f"OK: wrote {out}")
+
+    print(f"[OK] Built AIFM: {out_path}")
     return 0
 
-def cmd_pack_aifi(ns):
-    out = build_aifi(
-        image_path=Path(ns.image),
-        out_path=Path(ns.out),
-        title=ns.title,
-        creator_name=ns.creator_name,
-        creator_contact=ns.creator_contact,
-        declaration=ns.declaration,
-        mode=ns.mode,
+def cmd_pack_aifi(ns: argparse.Namespace) -> int:
+    from pathlib import Path
+    from core.packaging.aifi_packager import build_aifi
+
+    out_path = Path(ns.out).expanduser().resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    built = build_aifi(
+        image_path=Path(ns.image).expanduser().resolve(),
+        out_path=out_path,
+        title=str(ns.title),
+        creator_name=str(ns.creator_name),
+        creator_contact=str(ns.creator_contact),
+        mode=str(ns.mode),
     )
-    print(f"[OK] Built AIFI: {out}")
+
+    print(f"[OK] Built AIFI: {built}")
     return 0
 
 def main(argv: list[str] | None = None) -> int:
@@ -175,13 +231,59 @@ def main(argv: list[str] | None = None) -> int:
 
     p_aifv = sub.add_parser("pack-aifv", help="Package a video+thumb into .aifv (no transcoding)")
     p_aifv.add_argument("--video", required=True, help="Path to source video")
-    p_aifv.add_argument("--thumb", required=True, help="Path to thumbnail (jpg/png)")
+    p_aifv.add_argument("--thumb", required=True, help="Path to thumbnail (jpg/jpeg/png/webp)")
     p_aifv.add_argument("--out", required=True, help="Output .aifv path")
     p_aifv.add_argument("--title", required=True, help="work.title")
     p_aifv.add_argument("--creator-name", required=True, help="creator.name")
     p_aifv.add_argument("--creator-contact", required=True, help="creator.contact (email)")
-    p_aifv.add_argument("--declaration", required=True, help="authorship declaration")
     p_aifv.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
+
+    # ----------------------------
+    # Phase 2: Provenance (1 required + up to 3 optional)
+    # ----------------------------
+    p_aifv.add_argument(
+        "--primary-tool",
+        required=True,
+        help="Primary AI tool used (required). Example: Meta, Veo, Runway, Pika, etc."
+    )
+    p_aifv.add_argument(
+        "--primary-tool-version",
+        default=None,
+        help="Primary tool version (optional)"
+    )
+    p_aifv.add_argument(
+        "--supporting-tool",
+        action="append",
+        default=[],
+        help="Supporting tool name (repeat up to 3). Example: DALL·E, ElevenLabs, DaVinci, etc."
+    )
+
+    # Optional (no URLs required in v0, but allowed)
+    p_aifv.add_argument(
+        "--origin-url",
+        default=None,
+        help="Optional origin URL (not required in v0)"
+    )
+
+    # ----------------------------
+    # Phase 2: Attestation (template + initials, timestamp auto)
+    # ----------------------------
+    p_aifv.add_argument(
+        "--attest",
+        action="store_true",
+        help="Include an attestation block (requires --initials)"
+    )
+    p_aifv.add_argument(
+        "--initials",
+        default=None,
+        help="Your initials for attestation (required if --attest)"
+    )
+    p_aifv.add_argument(
+        "--template-id",
+        default="AIFX-SDA-001",
+        help="Attestation template ID (default: AIFX-SDA-001)"
+    )
+
     p_aifv.set_defaults(fn=cmd_pack_aifv)
 
     p_aifm = sub.add_parser("pack-aifm", help="Package a single audio track into .aifm")
@@ -190,7 +292,6 @@ def main(argv: list[str] | None = None) -> int:
     p_aifm.add_argument("--title", required=True, help="work.title")
     p_aifm.add_argument("--creator-name", required=True, help="creator.name")
     p_aifm.add_argument("--creator-contact", required=True, help="creator.contact (email)")
-    p_aifm.add_argument("--declaration", required=True, help="authorship declaration")
     p_aifm.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
     p_aifm.add_argument("--cover", default=None, help="optional cover image path")
     p_aifm.set_defaults(fn=cmd_pack_aifm)
@@ -201,7 +302,6 @@ def main(argv: list[str] | None = None) -> int:
     p_aifi.add_argument("--title", required=True, help="work.title")
     p_aifi.add_argument("--creator-name", required=True, help="creator.name")
     p_aifi.add_argument("--creator-contact", required=True, help="creator.contact (email)")
-    p_aifi.add_argument("--declaration", required=True, help="authorship declaration")
     p_aifi.add_argument("--mode", default="human-directed-ai", help="mode")
     p_aifi.set_defaults(fn=cmd_pack_aifi)
 

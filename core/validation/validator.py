@@ -11,11 +11,25 @@ import hashlib
 class ValidationError(Exception):
     pass
 
-
 def _get_aifx_version(manifest: Dict[str, Any]) -> str:
+    # New schema (current)
+    ver = manifest.get("aifx_version")
+    if isinstance(ver, str) and ver.strip():
+        return ver.strip()
+
+    # Legacy schema support
     aifx = manifest.get("aifx") or {}
-    ver = aifx.get("version") or manifest.get("version") or ""
-    return str(ver).strip()
+    if isinstance(aifx, dict):
+        v2 = aifx.get("version")
+        if isinstance(v2, str) and v2.strip():
+            return v2.strip()
+
+    # Fallback legacy
+    v3 = manifest.get("version")
+    if isinstance(v3, str) and v3.strip():
+        return v3.strip()
+
+    return ""
 
 
 def _bool_is_true(v: Any) -> bool:

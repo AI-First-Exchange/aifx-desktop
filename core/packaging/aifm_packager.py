@@ -6,7 +6,7 @@ import zipfile
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, Optional
-
+from core.provenance.sda_templates import AIFX_SDA_001_TEXT
 
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
@@ -33,7 +33,6 @@ def build_aifm(
     title: str,
     creator_name: str,
     creator_contact: str,
-    declaration: str,
     mode: str = "human-directed-ai",
     cover_path: Optional[Path] = None,
 ) -> None:
@@ -50,16 +49,21 @@ def build_aifm(
     audio_rel = f"assets/audio.{audio_ext}"
     cover_rel = "assets/cover.jpg"  # normalize name regardless of input ext
 
-    # Minimal governance-aligned manifest
+    # Minimal governance-aligned manifest (SDA standardized)
     manifest: Dict[str, Any] = {
-        "aifx": {"version": "0"},
+        "aifx_version": "0.1",
+        "type": "AIFM",
+
         "work": {"title": str(title).strip()},
         "creator": {"name": str(creator_name).strip(), "contact": str(creator_contact).strip()},
+
         "mode": str(mode).strip(),
-        "ai_generated": True,
+        "ai_generated": True, 
         "verification_tier": "SDA",
-        "declaration": str(declaration).strip(),
-        "format": "AIFM",
+
+        # Canon: standardized SDA declaration (no custom user text)
+        "declaration": AIFX_SDA_001_TEXT,
+
         "assets": {
             "audio": audio_rel,
         },
@@ -111,7 +115,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--title", required=True, help="work.title")
     ap.add_argument("--creator-name", required=True, help="creator.name")
     ap.add_argument("--creator-contact", required=True, help="creator.contact")
-    ap.add_argument("--declaration", required=True, help="authorship declaration")
     ap.add_argument("--mode", default="human-directed-ai", help="mode (default: human-directed-ai)")
     ap.add_argument("--cover", default=None, help="optional cover image path")
 
@@ -123,7 +126,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         title=ns.title,
         creator_name=ns.creator_name,
         creator_contact=ns.creator_contact,
-        declaration=ns.declaration,
         mode=ns.mode,
         cover_path=Path(ns.cover).expanduser().resolve() if ns.cover else None,
     )

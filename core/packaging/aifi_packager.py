@@ -7,6 +7,7 @@ import shutil
 import zipfile
 from pathlib import Path
 from typing import Optional
+from core.provenance.sda_templates import AIFX_SDA_001_TEXT
 
 ALLOWED_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -20,7 +21,6 @@ def _sha256_file(path: Path) -> str:
 
 
 def _canonical_json_bytes(obj: dict) -> bytes:
-    # Canonical JSON for hashing (deterministic)
     return json.dumps(
         obj,
         sort_keys=True,
@@ -39,25 +39,10 @@ def build_aifi(
     title: str,
     creator_name: str,
     creator_contact: str,
-    declaration: str,
     mode: str = "human-directed-ai",
     *,
     aifx_version: str = "0.1",
 ) -> Path:
-    """
-    Build an AIFI v0 package.
-
-    Structure:
-      manifest.json
-      assets/image.<ext>
-
-    Canonical Integrity:
-      manifest.integrity.algorithm == sha256
-      manifest.integrity.manifest_hash_mode == canonical_excludes_self
-      manifest.integrity.hashed_files includes:
-        - assets/image.<ext>
-        - manifest.json (canonical hash excluding its own manifest.json entry)
-    """
     image_path = image_path.expanduser().resolve()
     out_path = out_path.expanduser().resolve()
 
@@ -77,8 +62,6 @@ def build_aifi(
         raise ValueError("creator_name must be non-empty")
     if not creator_contact.strip():
         raise ValueError("creator_contact must be non-empty")
-    if not declaration.strip():
-        raise ValueError("declaration must be non-empty")
 
     tmp_dir = out_path.parent / f".aifi_build_{out_path.stem}"
     if tmp_dir.exists():
@@ -97,7 +80,6 @@ def build_aifi(
 
         image_hash = _sha256_file(image_dest)
 
-        # Base manifest (no integrity yet)
         manifest: dict = {
             "aifx_version": aifx_version,
             "type": "AIFI",
@@ -106,35 +88,33 @@ def build_aifi(
             "mode": mode,
             "verification_tier": "SDA",
             "ai_generated": True,
-            "declaration": declaration,
-            # Optional informational section (not enforced in v0)
+            "declaration": AIFX_SDA_001_TEXT,
             "assets": {rel_image: {"sha256": image_hash}},
         }
 
-        # --- Integrity (Canonical AIFX) ---
         manifest["integrity"] = {
             "algorithm": "sha256",
             "manifest_hash_mode": "canonical_excludes_self",
             "hashed_files": {
                 rel_image: {"sha256": image_hash},
-                "manifest.json": {"sha256": ""},  # placeholder
+                "manifest.json": {"sha256": ""},
             },
         }
 
-        # Compute canonical manifest hash excluding only hashed_files["manifest.json"]
-        manifest_for_hash = json.loads(json.dumps(manifest))  # deep copy
+        manifest_for_hash = json.loads(json.dumps(manifest))
         hf = manifest_for_hash.get("integrity", {}).get("hashed_files", {})
         if isinstance(hf, dict):
             hf.pop("manifest.json", None)
 
         manifest_hash = _sha256_bytes(_canonical_json_bytes(manifest_for_hash))
-        manifest["integrity"]["hashed_files"]["manifest.json"] = {"sha256": manifest_hash}
+        manifest["integrity"]["hashed_files"]["manifest.json"]["sha256"] = manifest_hash
 
-        # Write manifest.json (pretty formatting is OK; validator should use canonical scheme)
         manifest_path = tmp_dir / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
-        # Zip into .aifi (no symlinks; only files under tmp_dir)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         if out_path.exists():
             out_path.unlink()
@@ -147,6 +127,5 @@ def build_aifi(
         return out_path
 
     finally:
-        # Always clean temp dir
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
