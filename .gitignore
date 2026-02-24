@@ -20,3 +20,18 @@ __pycache__/
 mcp/.env
 tests/out/
 out.json
+mcp/.env
+
+# macOS junk
+.DS_Store
+
+# Editor
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local secrets
+mcp/.env
