@@ -42,6 +42,8 @@ def build_aifi(
     mode: str = "human-directed-ai",
     *,
     aifx_version: str = "0.1",
+    primary_tool: Optional[str] = None,
+    supporting_tools: Optional[list[str]] = None,
 ) -> Path:
     image_path = image_path.expanduser().resolve()
     out_path = out_path.expanduser().resolve()
@@ -62,6 +64,12 @@ def build_aifi(
         raise ValueError("creator_name must be non-empty")
     if not creator_contact.strip():
         raise ValueError("creator_contact must be non-empty")
+    ptool = (primary_tool or "").strip()
+    supporting = [s.strip() for s in (supporting_tools or []) if s and s.strip()]
+    if not ptool:
+        raise ValueError("provenance.primary_tool is required")
+    if len(supporting) > 3:
+        raise ValueError("provenance.supporting_tools cannot exceed 3")
 
     tmp_dir = out_path.parent / f".aifi_build_{out_path.stem}"
     if tmp_dir.exists():
@@ -91,6 +99,9 @@ def build_aifi(
             "declaration": AIFX_SDA_001_TEXT,
             "assets": {rel_image: {"sha256": image_hash}},
         }
+        manifest["provenance"] = {"primary_tool": {"name": ptool}}
+        if supporting:
+            manifest["provenance"]["supporting_tools"] = [{"name": s} for s in supporting]
 
         manifest["integrity"] = {
             "algorithm": "sha256",

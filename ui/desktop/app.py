@@ -12,7 +12,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from core.packaging.aifi_packager import build_aifi
 from core.packaging.aifv_packager import build_aifv
+from core.provenance.sda_templates import AIFX_SDA_001_TEXT
 from ui.desktop.validator_bridge import validate_package_local
 
 # -----------------------------
@@ -56,8 +58,8 @@ AUDIO_EXTS = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
 VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
-ORG_NAME = "AI-First-Exchange"
-APP_NAME = "AIFX Desktop"
+PRODUCTION_ORG_NAME = "AI-First-Exchange"
+PRODUCTION_APP_NAME = "AIFX Desktop"
 
 
 def _abs(p: str) -> str:
@@ -66,6 +68,13 @@ def _abs(p: str) -> str:
 def resource_path(rel_path: str) -> str:
     base = Path(getattr(sys, "_MEIPASS")) if hasattr(sys, "_MEIPASS") else REPO_ROOT
     return str((base / rel_path).resolve())
+
+
+def _declaration_view() -> QtWidgets.QPlainTextEdit:
+    box = QtWidgets.QPlainTextEdit(AIFX_SDA_001_TEXT)
+    box.setReadOnly(True)
+    box.setMinimumHeight(96)
+    return box
 
 
 def collect_packages(selected_files: list[str], selected_folder: str | None = None) -> list[str]:
@@ -111,19 +120,19 @@ def collect_sources_by_ext(selected_files: list[str], selected_folder: str | Non
 class AppDefaults:
     creator_name: str = ""
     creator_email: str = ""
-    default_mode: str = "human-directed-ai"
-    default_output_dir: str = str(Path.home() / "Desktop")
+    default_mode: str = ""
+    default_output_dir: str = ""
 
 def _qsettings() -> QtCore.QSettings:
-    return QtCore.QSettings(ORG_NAME, APP_NAME)
+    return QtCore.QSettings()
 
 def load_defaults() -> AppDefaults:
     qs = _qsettings()
     return AppDefaults(
         creator_name=str(qs.value("defaults/creator_name", "")),
         creator_email=str(qs.value("defaults/creator_email", "")),
-        default_mode=str(qs.value("defaults/default_mode", "human-directed-ai")),
-        default_output_dir=str(qs.value("defaults/default_output_dir", str(Path.home() / "Desktop"))),
+        default_mode=str(qs.value("defaults/default_mode", "")),
+        default_output_dir=str(qs.value("defaults/default_output_dir", "")),
     )
 
 def save_defaults(d: AppDefaults) -> None:
@@ -331,6 +340,50 @@ class PackAIFVWorker(QtCore.QObject):
             self.error.emit(str(e))
 
 
+class PackAIFIWorker(QtCore.QObject):
+    finished = QtCore.Signal(object)  # payload
+    error = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        image_path: str,
+        out_path: str,
+        title: str,
+        creator_name: str,
+        creator_contact: str,
+        mode: str,
+        primary_tool: str,
+        supporting_tools: list[str],
+    ) -> None:
+        super().__init__()
+        self.image_path = image_path
+        self.out_path = out_path
+        self.title = title
+        self.creator_name = creator_name
+        self.creator_contact = creator_contact
+        self.mode = mode
+        self.primary_tool = primary_tool
+        self.supporting_tools = supporting_tools
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            out = build_aifi(
+                image_path=Path(self.image_path),
+                out_path=Path(self.out_path),
+                title=self.title,
+                creator_name=self.creator_name,
+                creator_contact=self.creator_contact,
+                mode=self.mode,
+                primary_tool=self.primary_tool,
+                supporting_tools=self.supporting_tools[:3],
+            )
+            v = validate_package_local(str(out))
+            self.finished.emit((str(out), v))
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 
 # -----------------------------
 # Panels
@@ -342,7 +395,7 @@ class HomePanel(QtWidgets.QWidget):
 
         title = QtWidgets.QLabel("AIFX Desktop (v0)")
         title.setStyleSheet("font-size: 18px; font-weight: 800;")
-        subtitle = QtWidgets.QLabel("Converter + Validator shell — SDA by design.")
+        subtitle = QtWidgets.QLabel("Converter + Validator for AIFM, AIFV, and AIFI packages.")
         subtitle.setStyleSheet("opacity: 0.8;")
 
         layout.addWidget(title)
@@ -350,9 +403,9 @@ class HomePanel(QtWidgets.QWidget):
         layout.addSpacing(10)
 
         msg = QtWidgets.QLabel(
-            "Use Defaults once, then Convert in batches.\n"
-            "Validate supports files or folders (recursive).\n"
-            "No identity verification claims — structure + integrity only."
+            "SDA in v0 uses the standardized AIFX-SDA-001 declaration.\n"
+            "This tool validates package structure and integrity; it is not identity verification.\n"
+            "Quick steps: set Defaults, Convert/Pack, then Validate."
         )
         msg.setStyleSheet("opacity: 0.9;")
         layout.addWidget(msg)
@@ -432,7 +485,7 @@ class DefaultsPanel(QtWidgets.QWidget):
             creator_name=self.creator_name.text().strip(),
             creator_email=self.creator_email.text().strip(),
             default_mode=self.mode_combo.currentText().strip(),
-            default_output_dir=self.output_dir.text().strip() or str(Path.home() / "Desktop"),
+            default_output_dir=self.output_dir.text().strip(),
         )
         save_defaults(d)
         self.status.setText("Saved.")
@@ -685,10 +738,8 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         out_row.addWidget(self.output_dir, 1)
         out_row.addWidget(self.output_browse)
 
-        # Confirmation checkbox (NO editing of declaration text)
-        self.confirm_cb = QtWidgets.QCheckBox(
-            "I confirm this work was created using human-directed AI and I assert authorship/responsibility for this package."
-        )
+        self.declaration_view = _declaration_view()
+        self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
 
         # Form layout
         form = QtWidgets.QFormLayout()
@@ -709,12 +760,14 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         form.addRow("Cover image (optional):", cover_row)
         form.addRow("Output folder:", out_row)
         layout.addLayout(form)
+        layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
+        layout.addWidget(self.declaration_view)
 
         layout.addWidget(QtWidgets.QLabel("Prompt (optional):"))
         layout.addWidget(self.prompt_text, 1)
         layout.addWidget(QtWidgets.QLabel("Lyrics (optional):"))
         layout.addWidget(self.lyrics_text, 1)
-        layout.addWidget(self.confirm_cb)
+        layout.addWidget(self.declaration_ack_cb)
 
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
@@ -728,7 +781,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.origin_platform.textChanged.connect(self._refresh_convert_enabled)
         self.origin_url.textChanged.connect(self._refresh_convert_enabled)
         self.ai_system.textChanged.connect(self._refresh_convert_enabled)
-        self.confirm_cb.stateChanged.connect(self._refresh_convert_enabled)
+        self.declaration_ack_cb.stateChanged.connect(self._refresh_convert_enabled)
 
         self._refresh_convert_enabled()
 
@@ -743,7 +796,6 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         d = load_defaults()
         self.creator_name.setText(d.creator_name)
         self.creator_email.setText(d.creator_email)
-        self.mode.setText(d.default_mode)
     
     def _on_drop(self, p: str) -> None:
         pp = Path(p)
@@ -797,7 +849,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
             bool(self.origin_platform.text().strip())
             and bool(self.ai_system.text().strip())
         )
-        confirmed = self.confirm_cb.isChecked()
+        confirmed = self.declaration_ack_cb.isChecked()
 
         self.convert_btn.setEnabled(bool(has_defaults and has_file and req_ok and confirmed))
 
@@ -984,6 +1036,9 @@ class PackAIFVPanel(QtWidgets.QWidget):
         form.addRow("Supporting Tools", self.supporting_tools)
         form.addRow("Origin URL", self.origin_url)
 
+        self.declaration_view = _declaration_view()
+        self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
+
         # Output row with browse button
         self.out_btn = QtWidgets.QPushButton("Browse…")
         self.out_btn.setMinimumWidth(120)
@@ -995,6 +1050,9 @@ class PackAIFVPanel(QtWidgets.QWidget):
         out_row.addWidget(self.out_btn)
 
         form.addRow("Output .aifv", out_row)
+        layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
+        layout.addWidget(self.declaration_view)
+        layout.addWidget(self.declaration_ack_cb)
 
         # --- Buttons
         btn_row = QtWidgets.QHBoxLayout()
@@ -1025,6 +1083,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
         self.creator_contact.textChanged.connect(self._refresh_enabled)
         self.out_path.textChanged.connect(self._refresh_enabled)
         self.primary_tool.textChanged.connect(self._refresh_enabled)
+        self.declaration_ack_cb.stateChanged.connect(self._refresh_enabled)
 
     def reload_defaults(self) -> None:
         d = load_defaults()
@@ -1096,6 +1155,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
         ok = ok and bool(self.creator_contact.text().strip())
         ok = ok and bool(self.out_path.text().strip())
         ok = ok and bool(self.primary_tool.text().strip())
+        ok = ok and self.declaration_ack_cb.isChecked()
         self.pack_btn.setEnabled(ok)
 
     def run_pack(self) -> None:
@@ -1175,6 +1235,222 @@ class PackAIFVPanel(QtWidgets.QWidget):
 
         self.status.setText("Done.")
         self._refresh_enabled()
+
+class PackAIFIPanel(QtWidgets.QWidget):
+    def __init__(self, defaults: AppDefaults) -> None:
+        super().__init__()
+        self._defaults = defaults
+        self._thread: Optional[QtCore.QThread] = None
+        self._worker: Optional[PackAIFIWorker] = None
+
+        self.image_path: Optional[str] = None
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        title = QtWidgets.QLabel("Package → Image (AIFI)")
+        title.setStyleSheet("font-size: 16px; font-weight: 800;")
+        layout.addWidget(title)
+
+        pick_row = QtWidgets.QGridLayout()
+        layout.addLayout(pick_row)
+
+        self.image_lbl = QtWidgets.QLabel("Image:")
+        self.image_path_lbl = QtWidgets.QLabel("—")
+        self.image_path_lbl.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.image_btn = QtWidgets.QPushButton("Browse Image…")
+        self.image_btn.clicked.connect(self._browse_image)
+        self.image_btn.setMinimumWidth(160)
+
+        pick_row.addWidget(self.image_lbl, 0, 0)
+        pick_row.addWidget(self.image_path_lbl, 0, 1)
+        pick_row.addWidget(self.image_btn, 0, 2)
+        pick_row.setColumnStretch(1, 1)
+        pick_row.setHorizontalSpacing(10)
+        pick_row.setVerticalSpacing(10)
+
+        form = QtWidgets.QFormLayout()
+        form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        layout.addLayout(form)
+
+        self.work_title = QtWidgets.QLineEdit()
+        self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
+        self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
+        self.mode = QtWidgets.QLineEdit(defaults.default_mode)
+        self.primary_tool = QtWidgets.QLineEdit()
+        self.supporting_tools = QtWidgets.QLineEdit()
+        self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
+
+        self.out_path = QtWidgets.QLineEdit()
+        self.out_path.setPlaceholderText("Output .aifi path (e.g., ~/Desktop/MyImage.aifi)")
+        self.out_btn = QtWidgets.QPushButton("Browse…")
+        self.out_btn.clicked.connect(self._browse_out)
+        out_row = QtWidgets.QHBoxLayout()
+        out_row.setContentsMargins(0, 0, 0, 0)
+        out_row.addWidget(self.out_path, 1)
+        out_row.addWidget(self.out_btn)
+
+        form.addRow("Title", self.work_title)
+        form.addRow("Creator Name", self.creator_name)
+        form.addRow("Creator Contact", self.creator_contact)
+        form.addRow("Mode", self.mode)
+        form.addRow("Primary Tool", self.primary_tool)
+        form.addRow("Supporting Tools", self.supporting_tools)
+        form.addRow("Output .aifi", out_row)
+
+        self.declaration_view = _declaration_view()
+        self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
+        layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
+        layout.addWidget(self.declaration_view)
+        layout.addWidget(self.declaration_ack_cb)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        layout.addLayout(btn_row)
+        self.pack_btn = QtWidgets.QPushButton("Package AIFI")
+        self.pack_btn.setEnabled(False)
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.pack_btn)
+        self.pack_btn.clicked.connect(self.run_pack)
+
+        self.results = QtWidgets.QPlainTextEdit()
+        self.results.setReadOnly(True)
+        self.results.setMinimumHeight(220)
+        layout.addWidget(self.results)
+
+        self.status = QtWidgets.QLabel("")
+        self.status.setStyleSheet("opacity: 0.85;")
+        layout.addWidget(self.status)
+
+        self.work_title.textChanged.connect(self._refresh_enabled)
+        self.creator_name.textChanged.connect(self._refresh_enabled)
+        self.creator_contact.textChanged.connect(self._refresh_enabled)
+        self.primary_tool.textChanged.connect(self._refresh_enabled)
+        self.out_path.textChanged.connect(self._refresh_enabled)
+        self.declaration_ack_cb.stateChanged.connect(self._refresh_enabled)
+        self._refresh_enabled()
+
+    def reload_defaults(self) -> None:
+        d = load_defaults()
+        self.creator_name.setText(d.creator_name)
+        self.creator_contact.setText(d.creator_email)
+        self.mode.setText(d.default_mode)
+
+    def _browse_image(self) -> None:
+        fp, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Select image", str(Path.home()), "Image (*.png *.jpg *.jpeg *.webp);;All files (*)"
+        )
+        if fp:
+            self.image_path = fp
+            self.image_path_lbl.setText(fp)
+            if not self.work_title.text().strip():
+                self.work_title.setText(Path(fp).stem)
+            self._refresh_enabled()
+
+    def _browse_out(self) -> None:
+        start_dir = str(Path.home())
+        try:
+            cur = self.out_path.text().strip()
+            if cur:
+                start_dir = str(Path(cur).expanduser().resolve().parent)
+            elif self.image_path:
+                start_dir = str(Path(self.image_path).expanduser().resolve().parent)
+            elif self._defaults.default_output_dir:
+                start_dir = str(Path(self._defaults.default_output_dir).expanduser().resolve())
+        except Exception:
+            pass
+
+        fp, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save AIFI package as…",
+            str(Path(start_dir) / "image.aifi"),
+            "AIFI Package (*.aifi);;All files (*)",
+        )
+        if fp:
+            if not fp.lower().endswith(".aifi"):
+                fp += ".aifi"
+            self.out_path.setText(fp)
+            self._refresh_enabled()
+
+    def _refresh_enabled(self) -> None:
+        ok = True
+        ok = ok and bool(self.image_path)
+        ok = ok and bool(self.work_title.text().strip())
+        ok = ok and bool(self.creator_name.text().strip())
+        ok = ok and bool(self.creator_contact.text().strip())
+        ok = ok and bool(self.primary_tool.text().strip())
+        ok = ok and bool(self.out_path.text().strip())
+        ok = ok and self.declaration_ack_cb.isChecked()
+        self.pack_btn.setEnabled(ok)
+
+    def run_pack(self) -> None:
+        self.results.clear()
+        self.results.appendPlainText("Packaging to .aifi…")
+        self.pack_btn.setEnabled(False)
+
+        self._thread = QtCore.QThread(self)
+        self._worker = PackAIFIWorker(
+            image_path=str(self.image_path),
+            out_path=_abs(self.out_path.text().strip()),
+            title=self.work_title.text().strip(),
+            creator_name=self.creator_name.text().strip(),
+            creator_contact=self.creator_contact.text().strip(),
+            mode=self.mode.text().strip() or "human-directed-ai",
+            primary_tool=self.primary_tool.text().strip(),
+            supporting_tools=[
+                n.strip()
+                for n in self.supporting_tools.text().split(",")
+                if n.strip()
+            ][:3],
+        )
+        self._worker.moveToThread(self._thread)
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.error.connect(self._on_error)
+
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._worker.error.connect(self._thread.quit)
+        self._worker.error.connect(self._worker.deleteLater)
+
+        self._thread.start()
+
+    def _on_error(self, msg: str) -> None:
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"ERROR: {msg}")
+        self.status.setText("Failed.")
+        self._refresh_enabled()
+
+    def _on_finished(self, payload: object) -> None:
+        out_path, v = payload
+
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"[OK] Wrote: {out_path}")
+
+        valid = bool(v.get("valid", False))
+        errs = v.get("errors", []) or []
+        warns = v.get("warnings", []) or []
+        checks = v.get("checks", {}) or {}
+
+        self.results.appendPlainText("")
+        self.results.appendPlainText(f"Post-validate: {'PASS' if valid and not errs else 'FAIL'}")
+        if checks:
+            self.results.appendPlainText("Checks:")
+            for k, vv in _iter_checks_grouped(checks):
+                self.results.appendPlainText(f"  - {k}: {_format_check_value(k, vv)}")
+        if warns:
+            self.results.appendPlainText("Warnings:")
+            for w in warns:
+                self.results.appendPlainText(f"  - {w}")
+        if errs:
+            self.results.appendPlainText("Errors:")
+            for e in errs:
+                self.results.appendPlainText(f"  - {e}")
+
+        self.status.setText("Done.")
+        self._refresh_enabled()
+
 
 class PlaceholderPanel(QtWidgets.QWidget):
     def __init__(self, title_text: str, note: str) -> None:
@@ -1310,12 +1586,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.page_validate = ValidatePanel()
         self.page_music = ConvertMusicPanel()
         self.page_video = PackAIFVPanel(defaults)
-
-        # Until you build PackAIFI UI, keep this as placeholder
-        self.page_image = PlaceholderPanel(
-            "Convert → Image",
-            "Use CLI for now: python -m aifx pack-aifi ...",
-        )
+        self.page_image = PackAIFIPanel(defaults)
 
         self.page_project = PlaceholderPanel(
             "Convert → Project",
@@ -1391,6 +1662,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # When defaults saved, refresh convert panels
         self.page_defaults.defaultsSaved.connect(self.page_music.reload_defaults)
         self.page_defaults.defaultsSaved.connect(self.page_video.reload_defaults)
+        self.page_defaults.defaultsSaved.connect(self.page_image.reload_defaults)
         
         # Landing
         self._go(0, self.btn_home)
@@ -1471,6 +1743,8 @@ def main() -> None:
     )
 
     app = QtWidgets.QApplication(sys.argv)
+    QtCore.QCoreApplication.setOrganizationName(PRODUCTION_ORG_NAME)
+    QtCore.QCoreApplication.setApplicationName(PRODUCTION_APP_NAME)
     w = MainWindow()
     w.show()
     sys.exit(app.exec())
