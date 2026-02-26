@@ -73,7 +73,17 @@ def resource_path(rel_path: str) -> str:
 def _declaration_view() -> QtWidgets.QPlainTextEdit:
     box = QtWidgets.QPlainTextEdit(AIFX_SDA_001_TEXT)
     box.setReadOnly(True)
-    box.setMinimumHeight(96)
+    box.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
+
+    # ~5 visible lines
+    fm = box.fontMetrics()
+    height = (fm.lineSpacing() * 5) + 16
+
+    box.setMinimumHeight(height)
+    box.setMaximumHeight(height)
+    box.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                      QtWidgets.QSizePolicy.Fixed)
+
     return box
 
 
@@ -393,22 +403,51 @@ class HomePanel(QtWidgets.QWidget):
         super().__init__()
         layout = QtWidgets.QVBoxLayout(self)
 
+        # --- Title
         title = QtWidgets.QLabel("AIFX Desktop (v0)")
-        title.setStyleSheet("font-size: 18px; font-weight: 800;")
-        subtitle = QtWidgets.QLabel("Converter + Validator for AIFM, AIFV, and AIFI packages.")
-        subtitle.setStyleSheet("opacity: 0.8;")
-
+        title.setStyleSheet("font-size: 20px; font-weight: 900;")
         layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addSpacing(10)
 
-        msg = QtWidgets.QLabel(
-            "SDA in v0 uses the standardized AIFX-SDA-001 declaration.\n"
-            "This tool validates package structure and integrity; it is not identity verification.\n"
-            "Quick steps: set Defaults, Convert/Pack, then Validate."
+        subtitle = QtWidgets.QLabel("Converter + Validator for AI-First Exchange packages.")
+        subtitle.setStyleSheet("opacity: 0.8;")
+        layout.addWidget(subtitle)
+
+        layout.addSpacing(12)
+
+        # --- Body
+        body = QtWidgets.QLabel(
+            """
+<b>What is AIFX?</b><br>
+AIFX (AI-First Exchange) is an open packaging standard for AI-generated works.
+It bundles media + a manifest with <b>Self-Declared Authorship (SDA)</b>
+and integrity hashes so files remain verifiable after sharing.<br><br>
+
+<b>Supported in v0</b><br>
+• Music → <b>.aifm</b><br>
+• Video → <b>.aifv</b><br>
+• Image → <b>.aifi</b><br>
+• Package validation (PASS / WARN / FAIL)<br><br>
+
+<b>Declaration Model</b><br>
+v0 uses standardized <b>AIFX-SDA-001</b>.  
+This app validates structure and integrity only — it does not perform identity verification.<br><br>
+
+<b>Quick Start</b><br>
+1. Set <b>Defaults</b><br>
+2. Convert / Package<br>
+3. Validate your output<br><br>
+
+<b>Foundation</b><br>
+GitHub: AI-First-Exchange / aifx-desktop
+"""
         )
-        msg.setStyleSheet("opacity: 0.9;")
-        layout.addWidget(msg)
+
+        body.setWordWrap(True)
+        body.setTextFormat(QtCore.Qt.RichText)
+        body.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        body.setStyleSheet("font-size: 13px; opacity: 0.95;")
+
+        layout.addWidget(body)
         layout.addStretch(1)
 
 
@@ -529,11 +568,24 @@ class ValidatePanel(QtWidgets.QWidget):
 
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
-        layout.addWidget(self.results, 1)
+        self.results.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
+
+        fm = self.results.fontMetrics()
+        lines = 14  # adjust 10–15 to taste
+        h = (fm.lineSpacing() * lines) + 16
+
+        self.results.setMinimumHeight(h)
+        self.results.setMaximumHeight(h)
+        self.results.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                   QtWidgets.QSizePolicy.Fixed)
+
+        layout.addWidget(self.results)  # <-- no stretch factor
 
         self.status = QtWidgets.QLabel("")
         self.status.setStyleSheet("opacity: 0.8;")
         layout.addWidget(self.status)
+
+        layout.addStretch(1)  # optional: keeps layout balanced
 
     def _on_drop(self, p: str) -> None:
         pp = Path(p)
@@ -671,13 +723,11 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         row.addWidget(self.convert_btn)
         layout.addLayout(row)
 
-        # ---- Defaults (loaded) ----
+        # ---- Creator fields (auto-fill from defaults if present, but editable) ----
         self.creator_name = QtWidgets.QLineEdit()
         self.creator_email = QtWidgets.QLineEdit()
-        self.creator_name.setReadOnly(True)
-        self.creator_email.setReadOnly(True)
 
-        # ---- Required per-track fields (NO DEFAULTS) ----
+        # ---- Required per-track fields ----
         self.origin_platform = QtWidgets.QLineEdit()
         self.origin_url = QtWidgets.QLineEdit()
         self.ai_system = QtWidgets.QLineEdit()
@@ -705,7 +755,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.selected_file_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         self.selected_file_label.setMinimumWidth(120)
 
-        # Make important fields readable (about ~60 chars)
+        # Make important fields readable
         for le in (
             self.creator_name,
             self.creator_email,
@@ -721,6 +771,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
             le.setClearButtonEnabled(True)
 
         cover_row = QtWidgets.QHBoxLayout()
+        cover_row.setContentsMargins(0, 0, 0, 0)
         cover_row.addWidget(self.cover_path, 1)
         cover_row.addWidget(self.cover_browse)
 
@@ -730,13 +781,16 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.lyrics_text = QtWidgets.QPlainTextEdit()
         self.lyrics_text.setPlaceholderText("Optional lyrics…")
 
-        # Output dir (from defaults)
+        # Output .aifm (file path)
+        self.out_path = QtWidgets.QLineEdit()
+        self.out_path.setPlaceholderText("Output .aifm path (e.g., ~/Desktop/MySong.aifm)")
+        self.out_btn = QtWidgets.QPushButton("Browse…")
+        self.out_btn.clicked.connect(self._browse_out_aifm)
+
         out_row = QtWidgets.QHBoxLayout()
-        self.output_dir = QtWidgets.QLineEdit()
-        self.output_browse = QtWidgets.QPushButton("Browse…")
-        self.output_browse.clicked.connect(self._browse_outdir)
-        out_row.addWidget(self.output_dir, 1)
-        out_row.addWidget(self.output_browse)
+        out_row.setContentsMargins(0, 0, 0, 0)
+        out_row.addWidget(self.out_path, 1)
+        out_row.addWidget(self.out_btn)
 
         self.declaration_view = _declaration_view()
         self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
@@ -744,30 +798,31 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         # Form layout
         form = QtWidgets.QFormLayout()
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.ExpandingFieldsGrow)
-        form.addRow("Creator Name (Defaults):", self.creator_name)
-        form.addRow("Creator Email (Defaults):", self.creator_email)
-        
+        form.addRow("Creator Name (required):", self.creator_name)
+        form.addRow("Creator Email (required):", self.creator_email)
+
         title_row = QtWidgets.QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
         title_row.addWidget(self.music_title, 1)
         title_row.addWidget(self.selected_file_label)
 
         form.addRow("Title (required):", title_row)
-
         form.addRow("Origin Platform (required):", self.origin_platform)
         form.addRow("Origin URL (optional):", self.origin_url)
         form.addRow("AI System (required):", self.ai_system)
         form.addRow("Persona (optional):", self.persona)
         form.addRow("Cover image (optional):", cover_row)
-        form.addRow("Output folder:", out_row)
+        form.addRow("Output .aifm (required):", out_row)
+
         layout.addLayout(form)
         layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
+        layout.addWidget(self.declaration_ack_cb)
         layout.addWidget(self.declaration_view)
 
         layout.addWidget(QtWidgets.QLabel("Prompt (optional):"))
         layout.addWidget(self.prompt_text, 1)
         layout.addWidget(QtWidgets.QLabel("Lyrics (optional):"))
         layout.addWidget(self.lyrics_text, 1)
-        layout.addWidget(self.declaration_ack_cb)
 
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
@@ -783,6 +838,14 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         self.ai_system.textChanged.connect(self._refresh_convert_enabled)
         self.declaration_ack_cb.stateChanged.connect(self._refresh_convert_enabled)
 
+        self.creator_name.textChanged.connect(self._refresh_convert_enabled)
+        self.creator_email.textChanged.connect(self._refresh_convert_enabled)
+        self.music_title.textChanged.connect(self._refresh_convert_enabled)
+        self.out_path.textChanged.connect(self._refresh_convert_enabled)
+
+        # ✅ Load defaults once (only fill if empty)
+        self.reload_defaults()
+
         self._refresh_convert_enabled()
 
     def _mark_ai_system_touched(self) -> None:
@@ -794,22 +857,39 @@ class ConvertMusicPanel(QtWidgets.QWidget):
 
     def reload_defaults(self) -> None:
         d = load_defaults()
-        self.creator_name.setText(d.creator_name)
-        self.creator_email.setText(d.creator_email)
-    
+        # Only fill if empty, so user can override and it works without defaults too
+        if not self.creator_name.text().strip():
+            self.creator_name.setText(d.creator_name)
+        if not self.creator_email.text().strip():
+            self.creator_email.setText(d.creator_email)
+
     def _on_drop(self, p: str) -> None:
         pp = Path(p)
         if pp.is_dir():
-            QtWidgets.QMessageBox.information(self, "Single track only", "Music conversion is single-track only. Drop an audio file, not a folder.")
+            QtWidgets.QMessageBox.information(
+                self, "Single track only",
+                "Music conversion is single-track only. Drop an audio file, not a folder."
+            )
             return
 
-        if not pp.suffix.lower() in AUDIO_EXTS:
-            QtWidgets.QMessageBox.information(self, "Unsupported file", "Please drop a supported audio file (.wav/.mp3/.flac/.m4a/.ogg).")
+        if pp.suffix.lower() not in AUDIO_EXTS:
+            QtWidgets.QMessageBox.information(
+                self, "Unsupported file",
+                "Please drop a supported audio file (.wav/.mp3/.flac/.m4a/.ogg)."
+            )
             return
 
         self.selected_file = str(pp)
         self.status.setText(f"Selected: {pp.name}")
         self.selected_file_label.setText(f"({pp.name})")
+
+        # Auto-fill title if empty
+        if not self.music_title.text().strip():
+            self.music_title.setText(pp.stem)
+
+        # Auto-suggest output if empty
+        if not self.out_path.text().strip():
+            self._autofill_out_path_from_selected(pp)
 
         self._refresh_convert_enabled()
 
@@ -817,59 +897,117 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         file, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Select one audio file",
-            "",
+            str(Path.home()),
             "Audio Files (*.wav *.mp3 *.flac *.m4a *.ogg)",
         )
         if file:
             self.selected_file = file
-            self.status.setText(f"Selected: {Path(file).name}")
-            self.selected_file_label.setText(f"({Path(file).name})")
+            pp = Path(file)
+            self.status.setText(f"Selected: {pp.name}")
+            self.selected_file_label.setText(f"({pp.name})")
+
+            if not self.music_title.text().strip():
+                self.music_title.setText(pp.stem)
+
+            if not self.out_path.text().strip():
+                self._autofill_out_path_from_selected(pp)
+
             self._refresh_convert_enabled()
 
     def _browse_cover(self) -> None:
         file, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "Select cover image (optional)",
-            "",
+            str(Path.home()),
             "Images (*.png *.jpg *.jpeg *.webp)",
         )
         if file:
             self.cover_path.setText(file)
 
-    def _browse_outdir(self) -> None:
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose output folder", self.output_dir.text() or str(Path.home()))
-        if d:
-            self.output_dir.setText(d)
+    def _browse_out_aifm(self) -> None:
+        d = load_defaults()
+        start_dir = str(Path.home())
+
+        try:
+            cur = self.out_path.text().strip()
+            if cur:
+                start_dir = str(Path(cur).expanduser().resolve().parent)
+            elif getattr(d, "default_output_dir", ""):
+                start_dir = str(Path(d.default_output_dir).expanduser().resolve())
+            elif self.selected_file:
+                start_dir = str(Path(self.selected_file).expanduser().resolve().parent)
+        except Exception:
+            pass
+
+        default_name = "track.aifm"
+        try:
+            if self.music_title.text().strip():
+                default_name = f"{self.music_title.text().strip()}.aifm"
+            elif self.selected_file:
+                default_name = f"{Path(self.selected_file).stem}.aifm"
+        except Exception:
+            pass
+
+        fp, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save AIFM package as…",
+            str(Path(start_dir) / default_name),
+            "AIFM Package (*.aifm);;All files (*)",
+        )
+        if fp:
+            if not fp.lower().endswith(".aifm"):
+                fp += ".aifm"
+            self.out_path.setText(fp)
+            self._refresh_convert_enabled()
+
+    def _autofill_out_path_from_selected(self, pp: Path) -> None:
+        d = load_defaults()
+        base_dir = None
+        try:
+            if getattr(d, "default_output_dir", ""):
+                base_dir = Path(d.default_output_dir).expanduser()
+        except Exception:
+            base_dir = None
+
+        if not base_dir:
+            base_dir = pp.expanduser().resolve().parent
+
+        title = self.music_title.text().strip() or pp.stem
+        self.out_path.setText(str((base_dir / f"{title}.aifm").resolve()))
 
     def _refresh_convert_enabled(self) -> None:
-        d = load_defaults()
-        has_defaults = bool(d.creator_name.strip()) and bool(d.creator_email.strip())
         has_file = bool(self.selected_file)
+
+        creator_ok = bool(self.creator_name.text().strip()) and bool(self.creator_email.text().strip())
+
         req_ok = (
-            bool(self.origin_platform.text().strip())
+            bool(self.music_title.text().strip())
+            and bool(self.origin_platform.text().strip())
             and bool(self.ai_system.text().strip())
         )
+
+        out_ok = bool(self.out_path.text().strip())
         confirmed = self.declaration_ack_cb.isChecked()
 
-        self.convert_btn.setEnabled(bool(has_defaults and has_file and req_ok and confirmed))
+        self.convert_btn.setEnabled(bool(has_file and creator_ok and req_ok and out_ok and confirmed))
 
     def run_convert(self) -> None:
-        d = load_defaults()
-        if not d.creator_name.strip() or not d.creator_email.strip():
-            QtWidgets.QMessageBox.information(self, "Defaults required", "Set Creator Name and Email in Defaults first.")
-            return
         if not self.selected_file:
             QtWidgets.QMessageBox.information(self, "No input", "Select one audio file first.")
             return
         if not self.convert_btn.isEnabled():
-            QtWidgets.QMessageBox.information(self, "Missing required fields", "Fill required fields and check confirmation.")
+            QtWidgets.QMessageBox.information(
+                self, "Missing required fields",
+                "Fill required fields, set an output .aifm path, and check confirmation."
+            )
             return
 
         srcp = Path(self.selected_file)
-        title = srcp.stem
-        outdir = Path(_abs(self.output_dir.text().strip() or d.default_output_dir))
-        outdir.mkdir(parents=True, exist_ok=True)
-        out_path = outdir / f"{title}.aifm"
+
+        out_path = Path(_abs(self.out_path.text().strip()))
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        title = self.music_title.text().strip() or srcp.stem
 
         # Build AIFM inputs
         from core.conversion.aifm_converter import AIFMInputs
@@ -880,8 +1018,8 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         inp = AIFMInputs(
             audio_path=srcp,
             title=title,
-            creator_name=d.creator_name.strip(),
-            creator_contact=d.creator_email.strip(),
+            creator_name=self.creator_name.text().strip(),
+            creator_contact=self.creator_email.text().strip(),
             mode="human-directed-ai",
             ai_system=self.ai_system.text().strip(),
             origin_platform=self.origin_platform.text().strip(),
@@ -920,10 +1058,10 @@ class ConvertMusicPanel(QtWidgets.QWidget):
 
     def _on_finished(self, payload: object) -> None:
         out_path, v = payload
+
         self.results.appendPlainText("")
         self.results.appendPlainText(f"[OK] Wrote: {out_path}")
 
-        # Show validation summary (auto)
         valid = bool(v.get("valid", False))
         errs = v.get("errors", []) or []
         warns = v.get("warnings", []) or []
@@ -958,6 +1096,9 @@ class PackAIFVPanel(QtWidgets.QWidget):
         self.thumb_path: Optional[str] = None
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setAlignment(QtCore.Qt.AlignTop)     # ✅ prevents the “big gap”
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
 
         title = QtWidgets.QLabel("Package → Video (AIFV)")
         title.setStyleSheet("font-size: 16px; font-weight: 800;")
@@ -1000,44 +1141,35 @@ class PackAIFVPanel(QtWidgets.QWidget):
         self.video_btn.setMinimumWidth(160)
         self.thumb_btn.setMinimumWidth(160)
 
-        # --- Form
-        form = QtWidgets.QFormLayout()
-        layout.addLayout(form)
+        # --- Form (WRAPPED so it cannot steal vertical space)
+        form_wrap = QtWidgets.QWidget()
+        form_wrap.setContentsMargins(0, 0, 0, 0)
+        form_wrap.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
-        # Make the right column expand (important)
+        form = QtWidgets.QFormLayout(form_wrap)
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.DontWrapRows)
+
+        # IMPORTANT: add the wrapper widget, NOT the layout
+        layout.addWidget(form_wrap)
 
         self.work_title = QtWidgets.QLineEdit()
         self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
         self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
-        self.mode = QtWidgets.QLineEdit(defaults.default_mode)
         self.primary_tool = QtWidgets.QLineEdit()
         self.primary_tool_version = QtWidgets.QLineEdit()
         self.supporting_tools = QtWidgets.QLineEdit()
         self.origin_url = QtWidgets.QLineEdit()
         self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
 
-        # Make inputs expand like the big declaration area
-        for w in (self.work_title, self.creator_name, self.creator_contact, self.mode):
+        # Do NOT force widths (it causes clipping in scroll area)
+        for w in (self.work_title, self.creator_name, self.creator_contact):
             w.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-            w.setMinimumWidth(520)  # tweak 500–650 to taste
 
         self.out_path = QtWidgets.QLineEdit()
         self.out_path.setPlaceholderText("Output .aifv path (e.g., ~/Desktop/MyVideo.aifv)")
         self.out_path.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-
-        form.addRow("Title", self.work_title)
-        form.addRow("Creator Name", self.creator_name)
-        form.addRow("Creator Contact", self.creator_contact)
-        form.addRow("Mode", self.mode)
-        form.addRow("Primary Tool", self.primary_tool)
-        form.addRow("Primary Tool Version", self.primary_tool_version)
-        form.addRow("Supporting Tools", self.supporting_tools)
-        form.addRow("Origin URL", self.origin_url)
-
-        self.declaration_view = _declaration_view()
-        self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
 
         # Output row with browse button
         self.out_btn = QtWidgets.QPushButton("Browse…")
@@ -1046,13 +1178,32 @@ class PackAIFVPanel(QtWidgets.QWidget):
 
         out_row = QtWidgets.QHBoxLayout()
         out_row.setContentsMargins(0, 0, 0, 0)
+        out_row.setSpacing(10)
         out_row.addWidget(self.out_path, 1)
         out_row.addWidget(self.out_btn)
 
-        form.addRow("Output .aifv", out_row)
+        out_wrap = QtWidgets.QWidget()
+        out_wrap.setContentsMargins(0, 0, 0, 0)
+        out_wrap.setLayout(out_row)
+
+
+
+        # Add rows
+        form.addRow("Title", self.work_title)
+        form.addRow("Creator Name", self.creator_name)
+        form.addRow("Creator Contact", self.creator_contact)
+        form.addRow("Primary Tool", self.primary_tool)
+        form.addRow("Primary Tool Version", self.primary_tool_version)
+        form.addRow("Supporting Tools", self.supporting_tools)
+        form.addRow("Origin URL", self.origin_url)
+        form.addRow("Output .aifv", out_wrap)   # ✅ add WIDGET, not layout
+
+        self.declaration_view = _declaration_view()
+        self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
+
         layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
-        layout.addWidget(self.declaration_view)
         layout.addWidget(self.declaration_ack_cb)
+        layout.addWidget(self.declaration_view)
 
         # --- Buttons
         btn_row = QtWidgets.QHBoxLayout()
@@ -1065,15 +1216,19 @@ class PackAIFVPanel(QtWidgets.QWidget):
 
         self.pack_btn.clicked.connect(self.run_pack)
 
-        # --- Results
+        # --- Results (compact, scrollable)
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
-        self.results.setMinimumHeight(220)
-        layout.addWidget(self.results)
+        self.results.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
 
-        self.status = QtWidgets.QLabel("")
-        self.status.setStyleSheet("opacity: 0.85;")
-        layout.addWidget(self.status)
+        fm = self.results.fontMetrics()
+        h = (fm.lineSpacing() * 5) + 16  # ~5 lines
+
+        self.results.setMinimumHeight(h)
+        self.results.setMaximumHeight(h)
+        self.results.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        layout.addWidget(self.results)
 
         self._refresh_enabled()
 
@@ -1096,13 +1251,6 @@ class PackAIFVPanel(QtWidgets.QWidget):
             self.creator_email.setText(d.creator_email)
         if hasattr(self, "output_dir"):
             self.output_dir.setText(d.default_output_dir)
-
-        # Only do this if your panel actually has a mode widget
-        if hasattr(self, "mode"):
-            try:
-                self.mode.setText(d.default_mode)
-            except Exception:
-                pass
 
     def _browse_video(self) -> None:
         fp, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1173,7 +1321,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
             title=self.work_title.text().strip(),
             creator_name=self.creator_name.text().strip(),
             creator_contact=self.creator_contact.text().strip(),
-            mode=self.mode.text().strip() or "human-directed-ai",
+            mode="human-directed-ai",
             primary_tool=self.primary_tool.text().strip(),
             primary_tool_version=self.primary_tool_version.text().strip(),
             supporting_tools=[
@@ -1246,6 +1394,7 @@ class PackAIFIPanel(QtWidgets.QWidget):
         self.image_path: Optional[str] = None
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setAlignment(QtCore.Qt.AlignTop)
 
         title = QtWidgets.QLabel("Package → Image (AIFI)")
         title.setStyleSheet("font-size: 16px; font-weight: 800;")
@@ -1259,7 +1408,7 @@ class PackAIFIPanel(QtWidgets.QWidget):
         self.image_path_lbl.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         self.image_btn = QtWidgets.QPushButton("Browse Image…")
         self.image_btn.clicked.connect(self._browse_image)
-        self.image_btn.setMinimumWidth(160)
+        self.image_btn.setMinimumWidth(120)
 
         pick_row.addWidget(self.image_lbl, 0, 0)
         pick_row.addWidget(self.image_path_lbl, 0, 1)
@@ -1268,15 +1417,21 @@ class PackAIFIPanel(QtWidgets.QWidget):
         pick_row.setHorizontalSpacing(10)
         pick_row.setVerticalSpacing(10)
 
-        form = QtWidgets.QFormLayout()
+        # --- Form (WRAPPED so it cannot steal vertical space)
+        form_wrap = QtWidgets.QWidget()
+        form_wrap.setContentsMargins(0, 0, 0, 0)
+        form_wrap.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+
+        form = QtWidgets.QFormLayout(form_wrap)
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        layout.addLayout(form)
+        form.setRowWrapPolicy(QtWidgets.QFormLayout.DontWrapRows)
+
+        layout.addWidget(form_wrap)
 
         self.work_title = QtWidgets.QLineEdit()
         self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
         self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
-        self.mode = QtWidgets.QLineEdit(defaults.default_mode)
         self.primary_tool = QtWidgets.QLineEdit()
         self.supporting_tools = QtWidgets.QLineEdit()
         self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
@@ -1285,25 +1440,35 @@ class PackAIFIPanel(QtWidgets.QWidget):
         self.out_path.setPlaceholderText("Output .aifi path (e.g., ~/Desktop/MyImage.aifi)")
         self.out_btn = QtWidgets.QPushButton("Browse…")
         self.out_btn.clicked.connect(self._browse_out)
+
         out_row = QtWidgets.QHBoxLayout()
         out_row.setContentsMargins(0, 0, 0, 0)
         out_row.addWidget(self.out_path, 1)
         out_row.addWidget(self.out_btn)
 
+        # macOS clipping guard (because of global padding)
+        for w in (
+            self.work_title, self.creator_name, self.creator_contact,
+            self.primary_tool, self.supporting_tools, self.out_path
+        ):
+            w.setMinimumHeight(34)
+
         form.addRow("Title", self.work_title)
         form.addRow("Creator Name", self.creator_name)
         form.addRow("Creator Contact", self.creator_contact)
-        form.addRow("Mode", self.mode)
         form.addRow("Primary Tool", self.primary_tool)
         form.addRow("Supporting Tools", self.supporting_tools)
         form.addRow("Output .aifi", out_row)
 
+        # Lock wrapper height AFTER rows exist
+        form_wrap.setFixedHeight(form_wrap.sizeHint().height() + 2)
+
         self.declaration_view = _declaration_view()
         self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
         layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
-        layout.addWidget(self.declaration_view)
         layout.addWidget(self.declaration_ack_cb)
-
+        layout.addWidget(self.declaration_view)
+        
         btn_row = QtWidgets.QHBoxLayout()
         layout.addLayout(btn_row)
         self.pack_btn = QtWidgets.QPushButton("Package AIFI")
@@ -1314,7 +1479,10 @@ class PackAIFIPanel(QtWidgets.QWidget):
 
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
-        self.results.setMinimumHeight(220)
+        self.results.setMinimumHeight(150)
+        self.results.setMaximumHeight(220)
+        self.results.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                   QtWidgets.QSizePolicy.Fixed)
         layout.addWidget(self.results)
 
         self.status = QtWidgets.QLabel("")
@@ -1333,7 +1501,6 @@ class PackAIFIPanel(QtWidgets.QWidget):
         d = load_defaults()
         self.creator_name.setText(d.creator_name)
         self.creator_contact.setText(d.creator_email)
-        self.mode.setText(d.default_mode)
 
     def _browse_image(self) -> None:
         fp, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -1394,7 +1561,7 @@ class PackAIFIPanel(QtWidgets.QWidget):
             title=self.work_title.text().strip(),
             creator_name=self.creator_name.text().strip(),
             creator_contact=self.creator_contact.text().strip(),
-            mode=self.mode.text().strip() or "human-directed-ai",
+            mode="human-directed-ai",
             primary_tool=self.primary_tool.text().strip(),
             supporting_tools=[
                 n.strip()
@@ -1513,8 +1680,16 @@ class MainWindow(QtWidgets.QMainWindow):
             color: #f2f2f2;
             border: 1px solid rgba(255,255,255,0.18);
             border-radius: 8px;
-            padding: 6px 8px;
+
+            /* macOS: 6px vertical padding can clip text */
+            padding: 4px 8px;
         }
+
+        /* Give QLineEdit a stable height so text is never clipped */
+        QLineEdit {
+            min-height: 26px;
+        }
+
         QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
             border: 1px solid rgba(255,255,255,0.32);
         }
