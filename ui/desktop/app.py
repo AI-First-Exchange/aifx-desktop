@@ -209,28 +209,50 @@ class DropZone(QtWidgets.QFrame):
 
     def __init__(self, label_text: str = "Drop files here") -> None:
         super().__init__()
-        bg = resource_path("ui/desktop/assets/aifxbackground.png")
-        self.setStyleSheet(f"QMainWindow {{ background-image: url('{bg}'); background-position: center; background-repeat: repeat; }}")
 
         self.setAcceptDrops(True)
-        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.setFrameShadow(QtWidgets.QFrame.Raised)
         self.setMinimumHeight(120)
+
+        self.setObjectName("aifxDropZone")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+
+        # 🔥 Background image applied HERE
+        bg = resource_path("ui/desktop/assets/aifxbackground.png")
+
+        self.setStyleSheet(f"""
+#aifxDropZone {{
+    background-image: url('{bg}');
+    background-position: center;
+    background-repeat: repeat;
+    border: 2px dashed rgba(255,255,255,0.22);
+    border-radius: 12px;
+}}
+#aifxDropZone:hover {{
+    border-color: rgba(255,255,255,0.35);
+}}
+""")
 
         self.label = QtWidgets.QLabel(label_text)
         self.label.setAlignment(QtCore.Qt.AlignCenter)
+        self.label.setStyleSheet("""
+background: transparent;
+color: rgba(255,255,255,0.90);
+font-weight: 800;
+font-size: 14px;
+""")
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.label)
 
     def set_text(self, s: str) -> None:
         self.label.setText(s)
 
-    def dragEnterEvent(self, event: QtCore.QEvent) -> None:
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
-    def dropEvent(self, event: QtCore.QEvent) -> None:
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
         urls = event.mimeData().urls()
         if not urls:
             return
@@ -409,7 +431,7 @@ class HomePanel(QtWidgets.QWidget):
         layout.addWidget(title)
 
         subtitle = QtWidgets.QLabel("Converter + Validator for AI-First Exchange packages.")
-        subtitle.setStyleSheet("opacity: 0.8;")
+        subtitle.setStyleSheet("color: rgba(255,255,255,0.70);")
         layout.addWidget(subtitle)
 
         layout.addSpacing(12)
@@ -498,7 +520,7 @@ class DefaultsPanel(QtWidgets.QWidget):
         layout.addWidget(self.save_btn)
 
         self.status = QtWidgets.QLabel("")
-        self.status.setStyleSheet("opacity: 0.8;")
+        self.status.setStyleSheet("color: rgba(255,255,255,0.75);")
         layout.addWidget(self.status)
         layout.addStretch(1)
 
@@ -582,7 +604,7 @@ class ValidatePanel(QtWidgets.QWidget):
         layout.addWidget(self.results)  # <-- no stretch factor
 
         self.status = QtWidgets.QLabel("")
-        self.status.setStyleSheet("opacity: 0.8;")
+        self.status.setStyleSheet("color: rgba(255,255,255,0.75);")
         layout.addWidget(self.status)
 
         layout.addStretch(1)  # optional: keeps layout balanced
@@ -829,7 +851,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         layout.addWidget(self.results, 2)
 
         self.status = QtWidgets.QLabel("")
-        self.status.setStyleSheet("opacity: 0.8;")
+        self.status.setStyleSheet("color: rgba(255,255,255,0.75);")
         layout.addWidget(self.status)
 
         # Gate convert button as fields change
@@ -1733,7 +1755,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_validate = SidebarButton("Validate")
 
         self.lbl_convert = QtWidgets.QLabel("Convert")
-        self.lbl_convert.setStyleSheet("font-weight: 800; color: #888; padding: 6px 12px;")
+        self.lbl_convert.setStyleSheet("font-weight: 800; color: rgba(255,255,255,0.80); padding: 6px 12px;")
 
         self.btn_music = SidebarButton("Music", indent=14)
         self.btn_video = SidebarButton("Video", indent=14)
@@ -1918,8 +1940,29 @@ def main() -> None:
     )
 
     app = QtWidgets.QApplication(sys.argv)
+
+    # ----- FORCE CROSS-PLATFORM DARK STYLE -----
+    from PySide6.QtGui import QPalette, QColor
+
+    app.setStyle("Fusion")
+
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(32, 32, 32))
+    palette.setColor(QPalette.WindowText, QtCore.Qt.white)
+    palette.setColor(QPalette.Base, QColor(24, 24, 24))
+    palette.setColor(QPalette.AlternateBase, QColor(32, 32, 32))
+    palette.setColor(QPalette.Text, QtCore.Qt.white)
+    palette.setColor(QPalette.Button, QColor(45, 45, 45))
+    palette.setColor(QPalette.ButtonText, QtCore.Qt.white)
+    palette.setColor(QPalette.Highlight, QColor(0, 120, 215))
+    palette.setColor(QPalette.HighlightedText, QtCore.Qt.black)
+
+    app.setPalette(palette)
+    # --------------------------------------------
+
     QtCore.QCoreApplication.setOrganizationName(PRODUCTION_ORG_NAME)
     QtCore.QCoreApplication.setApplicationName(PRODUCTION_APP_NAME)
+
     w = MainWindow()
     w.show()
     sys.exit(app.exec())
