@@ -1,41 +1,49 @@
-# Python cache
+# ---------------------------
+# Python
+# ---------------------------
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+*.pyd
+*.so
 
 # Virtual environments
 .venv/
+venv/
+env/
 
-# Editor / OS junk
-.DS_Store
+# ---------------------------
+# Build artifacts
+# ---------------------------
+dist/
+build/
+build/pyinstaller/
+
+# ---------------------------
+# IDE / Editor
+# ---------------------------
+.vscode/
 *.swp
+*.swo
 *.bak
 *.bak.py
 *.bak2.py
 
-# IDE (keep or remove if you want)
-.vscode/
+# ---------------------------
+# OS junk
+# ---------------------------
+.DS_Store
+Thumbs.db
 
-# Local secrets
+# ---------------------------
+# Local secrets / env
+# ---------------------------
+.env
 mcp/.env
 tests/out/
 out.json
-mcp/.env
 
-# macOS junk
-.DS_Store
-
-# Editor
-*.swp
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Local secrets
-mcp/.env
-
-# PyInstaller outputs
-dist/
-build/pyinstaller/
+# ---------------------------
+# System / package keys
+# ---------------------------
+*.gpg
