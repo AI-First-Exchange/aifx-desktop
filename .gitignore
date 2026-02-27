@@ -1,0 +1,48 @@
+# =============================
+# Python
+# =============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# =============================
+# PyInstaller
+# =============================
+build/
+dist/
+*.spec
+
+# =============================
+# Editor / IDE
+# =============================
+.vscode/
+.idea/
+*.swp
+*.bak
+*.bak.py
+*.bak2.py
+
+# =============================
+# OS Junk
+# =============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =============================
+# Local secrets / local outputs
+# =============================
+mcp/.env
+tests/out/
+out.json
+
+# =============================
+# Cache / misc
+# =============================
+.cache/
+.pytest_cache/
