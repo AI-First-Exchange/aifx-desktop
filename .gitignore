@@ -47,3 +47,8 @@ out.json
 # System / package keys
 # ---------------------------
 *.gpg
+# Linux build artifacts
+.venv_jammy/
+AppDir/
+*.AppImage
+*.BROKEN.AppImage

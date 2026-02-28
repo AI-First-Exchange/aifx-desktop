@@ -1716,6 +1716,33 @@ class MainWindow(QtWidgets.QMainWindow):
             border: 1px solid rgba(255,255,255,0.32);
         }
 
+        /* Checkboxes (Linux/Fusion visibility fix) */
+        QCheckBox {
+            color: rgba(255,255,255,0.90);
+            font-weight: 700;
+        }
+
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.35);
+            border-radius: 4px;
+            background: rgba(0,0,0,0.20);
+        }
+
+        QCheckBox::indicator:hover {
+            border: 2px solid rgba(255,255,255,0.55);
+        }
+
+        QCheckBox::indicator:checked {
+            background: rgba(0,120,215,0.85);
+            border: 2px solid rgba(0,120,215,1.0);
+        }
+
+        QCheckBox::indicator:checked:hover {
+            background: rgba(0,120,215,1.0);
+        }
+                           
         /* Right-click menu */
         QMenu {
             background: #2b2b2b;
