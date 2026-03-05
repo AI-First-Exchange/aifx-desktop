@@ -166,41 +166,30 @@ class SidebarButton(QtWidgets.QPushButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 text-align: left;
-                padding: 10px 12px;
+                min-height: 32px;
+                padding: 6px 12px;
                 padding-left: {pad_left}px;
-                border: 1px solid transparent;
+                border: 1px solid rgba(255, 255, 255, 0.08);
                 border-radius: 10px;
-                background: transparent;
-                color: rgba(255, 255, 255, 0.88);
+                background: rgba(255, 255, 255, 0.05);
+                color: rgba(255, 255, 255, 0.90);
             }}
 
             QPushButton:hover {{
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.10);
+                background: rgba(255, 255, 255, 0.10);
+                border: 1px solid rgba(255, 255, 255, 0.16);
             }}
 
             QPushButton:checked {{
-                font-weight: 800;
+                font-weight: 700;
                 color: #ffffff;
-                border: 1px solid rgba(255, 255, 255, 0.22);
-
-                /* "metallic" highlight */
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(255,255,255,0.22),
-                    stop:0.45 rgba(255,255,255,0.12),
-                    stop:1 rgba(0,0,0,0.18)
-                );
+                border: 1px solid rgba(255, 255, 255, 0.28);
+                background: rgba(140, 180, 255, 0.22);
             }}
 
             QPushButton:checked:hover {{
-                border: 1px solid rgba(255, 255, 255, 0.30);
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(255,255,255,0.26),
-                    stop:0.45 rgba(255,255,255,0.14),
-                    stop:1 rgba(0,0,0,0.20)
-                );
+                border: 1px solid rgba(255, 255, 255, 0.34);
+                background: rgba(140, 180, 255, 0.28);
             }}
         """)
 
@@ -209,8 +198,9 @@ class DropZone(QtWidgets.QFrame):
 
     def __init__(self, label_text: str = "Drop files here") -> None:
         super().__init__()
-        bg = resource_path("ui/desktop/assets/aifxbackground.png")
-        self.setStyleSheet(f"QMainWindow {{ background-image: url('{bg}'); background-position: center; background-repeat: repeat; }}")
+        self.setObjectName("DropZone")
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self._set_glass_style(False)
 
         self.setAcceptDrops(True)
         self.setFrameShape(QtWidgets.QFrame.StyledPanel)
@@ -219,18 +209,47 @@ class DropZone(QtWidgets.QFrame):
 
         self.label = QtWidgets.QLabel(label_text)
         self.label.setAlignment(QtCore.Qt.AlignCenter)
+        self.label.setStyleSheet("background: transparent; color: rgba(255,255,255,0.9);")
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
         layout.addWidget(self.label)
 
     def set_text(self, s: str) -> None:
         self.label.setText(s)
 
+    def _set_glass_style(self, drag_active: bool) -> None:
+        if drag_active:
+            border = "2px dashed rgba(174, 210, 255, 0.85)"
+            bg = "rgba(42, 58, 82, 0.38)"
+        else:
+            border = "1px solid rgba(255, 255, 255, 0.20)"
+            bg = "rgba(26, 30, 38, 0.28)"
+        self.setStyleSheet(f"""
+        #DropZone {{
+            border: {border};
+            border-radius: 14px;
+            background: {bg};
+        }}
+        #DropZone:hover {{
+            background: rgba(40, 46, 58, 0.34);
+            border: 1px solid rgba(255, 255, 255, 0.30);
+        }}
+        """)
+
     def dragEnterEvent(self, event: QtCore.QEvent) -> None:
         if event.mimeData().hasUrls():
+            self._set_glass_style(True)
             event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event: QtCore.QEvent) -> None:
+        self._set_glass_style(False)
+        event.accept()
 
     def dropEvent(self, event: QtCore.QEvent) -> None:
+        self._set_glass_style(False)
         urls = event.mimeData().urls()
         if not urls:
             return
@@ -863,6 +882,51 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         if not self.creator_email.text().strip():
             self.creator_email.setText(d.creator_email)
 
+    def _reset_form(self) -> None:
+        self.selected_file = None
+        self.selected_file_label.setText("No file selected")
+
+        # Clear known per-conversion fields.
+        self.music_title.clear()
+        self.creator_name.clear()
+        self.creator_email.clear()
+        self.origin_platform.clear()
+        self.origin_url.clear()
+        self.ai_system.clear()
+        self.persona.clear()
+        self.cover_path.clear()
+        self.out_path.clear()
+        self.prompt_text.clear()
+        self.lyrics_text.clear()
+
+        # Clear optional alias fields if present.
+        for name in (
+            "title_field",
+            "creator_name_field",
+            "creator_contact_field",
+            "primary_tool_field",
+            "supporting_tools_field",
+            "origin_url_field",
+            "cover_path_field",
+            "out_path_field",
+        ):
+            w = getattr(self, name, None)
+            if w is not None and hasattr(w, "clear"):
+                w.clear()
+
+        self.declaration_ack_cb.setChecked(False)
+        self.results.clear()
+        self.status.setText("")
+
+        if hasattr(self, "results_text"):
+            self.results_text.clear()
+        if hasattr(self, "status_label"):
+            self.status_label.setText("")
+
+        self._ai_system_user_touched = False
+        self.reload_defaults()
+        self._refresh_convert_enabled()
+
     def _on_drop(self, p: str) -> None:
         pp = Path(p)
         if pp.is_dir():
@@ -1084,6 +1148,7 @@ class ConvertMusicPanel(QtWidgets.QWidget):
 
         self.status.setText("Done.")
         self._refresh_convert_enabled()
+        self._reset_form()
 
 class PackAIFVPanel(QtWidgets.QWidget):
     def __init__(self, defaults: AppDefaults) -> None:
@@ -1252,6 +1317,50 @@ class PackAIFVPanel(QtWidgets.QWidget):
         if hasattr(self, "output_dir"):
             self.output_dir.setText(d.default_output_dir)
 
+    def _set_status(self, text: str) -> None:
+        if hasattr(self, "status"):
+            self.status.setText(text)
+        elif hasattr(self, "status_label"):
+            self.status_label.setText(text)
+
+    def _reset_form(self) -> None:
+        self.video_path = ""
+        self.thumb_path = ""
+        self.video_path_lbl.setText("No file selected")
+        self.thumb_path_lbl.setText("No file selected")
+
+        self.work_title.clear()
+        self.creator_name.clear()
+        self.creator_contact.clear()
+        self.primary_tool.clear()
+        self.primary_tool_version.clear()
+        self.supporting_tools.clear()
+        self.origin_url.clear()
+        self.out_path.clear()
+
+        for name in (
+            "work_title_field",
+            "creator_name_field",
+            "creator_contact_field",
+            "primary_tool_field",
+            "primary_tool_version_field",
+            "supporting_tools_field",
+            "origin_url_field",
+            "out_path_field",
+        ):
+            w = getattr(self, name, None)
+            if w is not None and hasattr(w, "clear"):
+                w.clear()
+
+        self.declaration_ack_cb.setChecked(False)
+        self.results.clear()
+        if hasattr(self, "results_text"):
+            self.results_text.clear()
+        self._set_status("")
+
+        self.reload_defaults()
+        self._refresh_enabled()
+
     def _browse_video(self) -> None:
         fp, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Select video", str(Path.home()), "Video (*.mp4 *.mov *.webm *.m4v);;All files (*)"
@@ -1349,7 +1458,7 @@ class PackAIFVPanel(QtWidgets.QWidget):
     def _on_error(self, msg: str) -> None:
         self.results.appendPlainText("")
         self.results.appendPlainText(f"ERROR: {msg}")
-        self.status.setText("Failed.")
+        self._set_status("Failed.")
         self._refresh_enabled()
 
     def _on_finished(self, payload: object) -> None:
@@ -1381,8 +1490,9 @@ class PackAIFVPanel(QtWidgets.QWidget):
             for e in errs:
                 self.results.appendPlainText(f"  - {e}")
 
-        self.status.setText("Done.")
+        self._set_status("Done.")
         self._refresh_enabled()
+        QtCore.QTimer.singleShot(0, self._reset_form)
 
 class PackAIFIPanel(QtWidgets.QWidget):
     def __init__(self, defaults: AppDefaults) -> None:
@@ -1502,6 +1612,44 @@ class PackAIFIPanel(QtWidgets.QWidget):
         self.creator_name.setText(d.creator_name)
         self.creator_contact.setText(d.creator_email)
 
+    def _reset_form(self) -> None:
+        self.image_path = ""
+        self.image_path_lbl.setText("No file selected")
+
+        self.work_title.clear()
+        self.creator_name.clear()
+        self.creator_contact.clear()
+        self.primary_tool.clear()
+        self.supporting_tools.clear()
+        self.out_path.clear()
+
+        for name in (
+            "work_title_field",
+            "creator_name_field",
+            "creator_contact_field",
+            "primary_tool_field",
+            "supporting_tools_field",
+            "origin_url_field",
+            "out_path_field",
+        ):
+            w = getattr(self, name, None)
+            if w is not None and hasattr(w, "clear"):
+                w.clear()
+
+        if hasattr(self, "origin_url") and hasattr(self.origin_url, "clear"):
+            self.origin_url.clear()
+
+        self.declaration_ack_cb.setChecked(False)
+        self.results.clear()
+        self.status.setText("")
+        if hasattr(self, "results_text"):
+            self.results_text.clear()
+        if hasattr(self, "status_label"):
+            self.status_label.setText("")
+
+        self.reload_defaults()
+        self._refresh_enabled()
+
     def _browse_image(self) -> None:
         fp, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Select image", str(Path.home()), "Image (*.png *.jpg *.jpeg *.webp);;All files (*)"
@@ -1617,6 +1765,7 @@ class PackAIFIPanel(QtWidgets.QWidget):
 
         self.status.setText("Done.")
         self._refresh_enabled()
+        self._reset_form()
 
 
 class PlaceholderPanel(QtWidgets.QWidget):
@@ -1642,6 +1791,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Background image (window-level, cross-platform safe)
         bg = resource_path("ui/desktop/assets/aifxbackground.png")
+        bg_url = bg.replace("\\", "/")
         pm = QtGui.QPixmap(bg)
         if not pm.isNull():
             pal = self.palette()
@@ -1652,53 +1802,49 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("AIFX Desktop (v0) — Converter + Validator")
         self.resize(980, 640)
         self.setStyleSheet("""
-        /* Buttons (Browse, Save, Validate, etc.) */
         QPushButton {
-            background: #3b3b3b;
-            color: #f0f0f0;
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 10px;
-            padding: 8px 12px;
+            min-height: 32px;
+            padding: 6px 12px;
+            color: rgba(248, 250, 255, 0.96);
+            background: rgba(255, 255, 255, 0.11);
+            border: 1px solid rgba(255, 255, 255, 0.20);
+            border-radius: 9px;
         }
         QPushButton:hover {
-            background: #454545;
-            border: 1px solid rgba(255,255,255,0.35);
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.28);
         }
         QPushButton:pressed {
-            background: #2f2f2f;
-            border: 1px solid rgba(255,255,255,0.30);
+            background: rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255, 255, 255, 0.25);
         }
         QPushButton:disabled {
-            background: #262626;
-            color: rgba(255,255,255,0.40);
-            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(240, 244, 255, 0.45);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
         }
 
-        /* Inputs */
-        QLineEdit, QTextEdit, QPlainTextEdit {
-            background: #262626;
-            color: #f2f2f2;
-            border: 1px solid rgba(255,255,255,0.18);
+        QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+            min-height: 30px;
+            padding: 4px 10px;
+            background: rgba(20, 24, 31, 0.44);
+            color: rgba(248, 250, 255, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.18);
             border-radius: 8px;
-
-            /* macOS: 6px vertical padding can clip text */
-            padding: 4px 8px;
         }
-
-        /* Give QLineEdit a stable height so text is never clipped */
-        QLineEdit {
-            min-height: 26px;
+        QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus {
+            border: 1px solid rgba(170, 208, 255, 0.88);
+            background: rgba(22, 26, 34, 0.50);
         }
-
-        QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-            border: 1px solid rgba(255,255,255,0.32);
+        QCheckBox {
+            color: rgba(248, 250, 255, 0.95);
+            spacing: 8px;
         }
-
-        /* Right-click menu */
         QMenu {
-            background: #2b2b2b;
-            color: #f2f2f2;
-            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(24, 26, 34, 0.96);
+            color: rgba(248, 250, 255, 0.96);
+            border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 8px;
             padding: 6px;
         }
         QMenu::item {
@@ -1711,17 +1857,45 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
         central = QtWidgets.QWidget()
+        central.setObjectName("Central")
+        central.setStyleSheet("#Central { background: transparent; }")
         self.setCentralWidget(central)
 
+        # Background layer
+        self._bg_label = QtWidgets.QLabel(central)
+        self._bg_label.setScaledContents(True)
+        self._bg_pixmap = QtGui.QPixmap(resource_path("ui/desktop/assets/aifxbackground.png"))
+        self._bg_label.setPixmap(self._bg_pixmap)
+        self._bg_label.lower()
+
+        # Ensure background resizes with the window
+        central.installEventFilter(self)
+
         root = QtWidgets.QHBoxLayout(central)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(12)
 
         # Sidebar
         sidebar = QtWidgets.QFrame()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        sidebar.setStyleSheet("""
+        #Sidebar {{
+            background: rgba(20, 24, 33, 0.34);
+            border: 1px solid rgba(255,255,255,0.20);
+            border-radius: 14px;
+        }}
+        #Sidebar QLabel {{
+            background: transparent;
+            color: rgba(248, 250, 255, 0.95);
+        }}
+        """)
         sidebar.setMinimumWidth(140)
         sidebar.setMaximumWidth(180)
+        self._apply_panel_shadow(sidebar, blur=30, y=8, alpha=120)
         side = QtWidgets.QVBoxLayout(sidebar)
-        side.setContentsMargins(10, 10, 10, 10)
-        side.setSpacing(6)
+        side.setContentsMargins(12, 12, 12, 12)
+        side.setSpacing(10)
 
         title = QtWidgets.QLabel("AIFX Desktop")
         title.setStyleSheet("font-size: 16px; font-weight: 800;")
@@ -1733,7 +1907,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_validate = SidebarButton("Validate")
 
         self.lbl_convert = QtWidgets.QLabel("Convert")
-        self.lbl_convert.setStyleSheet("font-weight: 800; color: #888; padding: 6px 12px;")
+        self.lbl_convert.setStyleSheet("font-weight: 700; color: rgba(248, 250, 255, 0.72); padding: 6px 10px;")
 
         self.btn_music = SidebarButton("Music", indent=14)
         self.btn_video = SidebarButton("Video", indent=14)
@@ -1753,6 +1927,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Pages
         self.pages = QtWidgets.QStackedWidget()
+        self.pages.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.pages.setAutoFillBackground(False)
+        self.pages.setStyleSheet("background: transparent;")
 
         defaults = load_defaults()
 
@@ -1776,38 +1953,62 @@ class MainWindow(QtWidgets.QMainWindow):
         self.pages.addWidget(self.page_image)     # 5
         self.pages.addWidget(self.page_project)   # 6
 
+        for page in (
+            self.page_home,
+            self.page_defaults,
+            self.page_validate,
+            self.page_music,
+            self.page_video,
+            self.page_image,
+            self.page_project,
+        ):
+            page.setAutoFillBackground(False)
+            page.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+            page.setStyleSheet("""
+            background: rgba(20, 24, 33, 0.26);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 12px;
+            """)
+            self._apply_panel_shadow(page, blur=22, y=4, alpha=70)
+            lay = page.layout()
+            if lay is not None:
+                lay.setSpacing(12)
+                lay.setContentsMargins(14, 14, 14, 14)
+
         root.addWidget(sidebar)
 
         # Scroll area (keeps pages scrollable)
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.scroll.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.scroll.viewport().setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.scroll.viewport().setAutoFillBackground(False)
         self.scroll.setWidget(self.pages)
-        self.scroll.setStyleSheet("background: transparent;")
-        self.pages.setStyleSheet("background: transparent;")
+        self.scroll.setStyleSheet("""
+        QScrollArea { background: transparent; border: none; }
+        QScrollArea > QWidget > QWidget { background: transparent; }
+        """)
 
         # Content frame (gives us a background panel we can style)
         self.content_frame = QtWidgets.QFrame()
         self.content_frame.setObjectName("contentFrame")
+        self.content_frame.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.content_frame.setAutoFillBackground(False)
         self.content_frame.setStyleSheet("""
         QFrame#contentFrame {
-            background-color: rgba(45, 45, 45, 220);
-            border-radius: 12px;
+            background: rgba(20, 24, 33, 0.36);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.22);
         }
         """)
+        self._apply_panel_shadow(self.content_frame, blur=34, y=10, alpha=130)
 
         content_layout = QtWidgets.QVBoxLayout(self.content_frame)
-        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setContentsMargins(8, 8, 8, 8)
         content_layout.addWidget(self.scroll)
 
         root.addWidget(self.content_frame, 1)
-
-        self.content_frame.setStyleSheet("""
-        QFrame#contentFrame {
-            background: #3a3a3a;
-            border-radius: 10px;
-        }
-        """)
 
         # Exclusive nav group
         self.nav_group = QtWidgets.QButtonGroup(self)
@@ -1842,49 +2043,33 @@ class MainWindow(QtWidgets.QMainWindow):
         # Landing
         self._go(0, self.btn_home)
 
+    def eventFilter(self, obj, event):
+        if hasattr(self, "_bg_label") and obj is self.centralWidget() and event.type() == QtCore.QEvent.Resize:
+            self._bg_label.setGeometry(0, 0, obj.width(), obj.height())
+        return super().eventFilter(obj, event)
+
+    def _apply_panel_shadow(self, widget: QtWidgets.QWidget, *, blur: int, y: int, alpha: int) -> None:
+        shadow = QtWidgets.QGraphicsDropShadowEffect(widget)
+        shadow.setBlurRadius(blur)
+        shadow.setOffset(0, y)
+        shadow.setColor(QtGui.QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
     def _set_content_style(self, active: bool) -> None:
         if active:
             self.content_frame.setStyleSheet("""
             QFrame#contentFrame {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #3b3b3b,
-                    stop:1 #2e2e2e
-                );
-                border-radius: 10px;
-            }
-
-            /* Light satin inputs on dark metal */
-            QLineEdit, QTextEdit, QPlainTextEdit {
-                   background: #555;
-                   color: #ffffff;
-                   border: 1px solid #6a6a6a;
-                   border-radius: 6px;
-                   padding: 6px 8px;
-            }
-
-            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-                background: #606060;
-                border: 1px solid #9a9a9a;
-            }
-
-            QLineEdit::placeholder, QTextEdit::placeholder, QPlainTextEdit::placeholder {
-                color: rgba(255, 255, 255, 0.55);
+                background: rgba(20, 24, 33, 0.38);
+                border-radius: 14px;
+                border: 1px solid rgba(255,255,255,0.24);
             }
             """)
         else:
             self.content_frame.setStyleSheet("""
             QFrame#contentFrame {
-                background: #2b2b2b;
-                border-radius: 10px;
-            }  
-
-            QLineEdit, QTextEdit, QPlainTextEdit {
-                background: #444;
-                color: #eee;
-                border: 1px solid #555;
-                border-radius: 6px;
-                padding: 6px 8px;
+                background: rgba(20, 24, 33, 0.30);
+                border-radius: 14px;
+                border: 1px solid rgba(255,255,255,0.20);
             }
             """)
 
@@ -1900,13 +2085,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Metallic silver background for active work area
         self.content_frame.setStyleSheet("""
         QFrame#contentFrame {
-            background: qlineargradient(
-                x1:0, y1:0, x2:0, y2:1,
-                stop:0 #3c3c3c,
-                stop:0.5 #343434,
-                stop:1 #2a2a2a
-            );
-            border-radius: 10px;
+            background: rgba(20, 24, 33, 0.38);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.24);
         }
         """)
 

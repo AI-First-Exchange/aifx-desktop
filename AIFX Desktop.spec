@@ -1,43 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from pathlib import Path
-
-import PySide6
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs
-
-project_root = Path(SPECPATH).resolve().parent
-
-pyside_datas, pyside_binaries, pyside_hiddenimports = collect_all("PySide6")
-pyside_binaries += collect_dynamic_libs("PySide6")
-pyside_datas += collect_data_files("PySide6", include_py_files=False)
-
-qt_platform_dir = Path(PySide6.__file__).resolve().parent / "Qt" / "plugins" / "platforms"
-for plugin in qt_platform_dir.glob("libqcocoa*.dylib"):
-    pyside_binaries.append((str(plugin), "PySide6/Qt/plugins/platforms"))
-
-app_datas = [
-    (str(project_root / "ui/desktop/assets/aifxbackground.png"), "ui/desktop/assets"),
-]
-
-hiddenimports = sorted(
-    set(
-        pyside_hiddenimports
-        + [
-            "core.conversion.aifm_converter",
-            "core.packaging.aifv_packager",
-            "core.validation.validator",
-            "core.validation.aifv_validator",
-            "ui.desktop.validator_bridge",
-        ]
-    )
-)
 
 a = Analysis(
-    [str(project_root / "ui/desktop/app.py")],
-    pathex=[str(project_root)],
-    binaries=pyside_binaries,
-    datas=pyside_datas + app_datas,
-    hiddenimports=hiddenimports,
+    ['ui/desktop/app.py'],
+    pathex=['.'],
+    binaries=[],
+    datas=[('ui/desktop/assets', 'ui/desktop/assets')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -50,25 +19,33 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
-    name="AIFX Desktop",
+    exclude_binaries=True,
+    name='AIFX Desktop',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=True,
     console=False,
-    target_arch="arm64",
     disable_windowed_traceback=False,
     argv_emulation=False,
+    target_arch='universal2',
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['ui/desktop/assets/AIFX.icns'],
 )
-
-app = BUNDLE(
+coll = COLLECT(
     exe,
-    name="AIFX Desktop.app",
-    icon=None,
-    bundle_identifier="com.aifx.desktop",
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='AIFX Desktop',
+)
+app = BUNDLE(
+    coll,
+    name='AIFX Desktop.app',
+    icon='ui/desktop/assets/AIFX.icns',
+    bundle_identifier=None,
 )

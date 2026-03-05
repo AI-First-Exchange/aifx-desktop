@@ -1,41 +1,55 @@
-# Python cache
+# ---------------------------
+# Python
+# ---------------------------
 __pycache__/
 *.pyc
 *.pyo
 
+# ---------------------------
 # Virtual environments
+# ---------------------------
 .venv/
+.venv-x86/
 
-# Editor / OS junk
+# ---------------------------
+# macOS
+# ---------------------------
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# ---------------------------
+# Editor / IDE
+# ---------------------------
+.vscode/
 *.swp
 *.bak
 *.bak.py
 *.bak2.py
 
-# IDE (keep or remove if you want)
-.vscode/
+# ---------------------------
+# PyInstaller build outputs
+# ---------------------------
+build/
+build_arm64/
+dist/
+dist_arm64/
+*.pkg
+*.log
 
-# Local secrets
-mcp/.env
+# ---------------------------
+# Release artifacts
+# ---------------------------
+*.dmg
+*.zip
+
+# ---------------------------
+# Local project outputs
+# ---------------------------
 tests/out/
 out.json
+
+# ---------------------------
+# Secrets / local env
+# ---------------------------
 mcp/.env
-
-# macOS junk
-.DS_Store
-
-# Editor
-*.swp
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Local secrets
-mcp/.env
-
-# PyInstaller outputs
-dist/
-build/pyinstaller/
