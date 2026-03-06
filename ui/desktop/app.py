@@ -70,20 +70,23 @@ def resource_path(rel_path: str) -> str:
     return str((base / rel_path).resolve())
 
 
-def _declaration_view() -> QtWidgets.QPlainTextEdit:
-    box = QtWidgets.QPlainTextEdit(AIFX_SDA_001_TEXT)
-    box.setReadOnly(True)
-    box.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
-
-    # ~5 visible lines
-    fm = box.fontMetrics()
-    height = (fm.lineSpacing() * 5) + 16
-
-    box.setMinimumHeight(height)
-    box.setMaximumHeight(height)
-    box.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
-                      QtWidgets.QSizePolicy.Fixed)
-
+def _declaration_view() -> QtWidgets.QLabel:
+    box = QtWidgets.QLabel(AIFX_SDA_001_TEXT)
+    box.setWordWrap(True)
+    box.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+    box.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
+    box.setSizePolicy(
+        QtWidgets.QSizePolicy.Expanding,
+        QtWidgets.QSizePolicy.Minimum
+    )
+    box.setStyleSheet("""
+        QLabel {
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            padding: 8px;
+            background: #1e1e1e;
+        }
+    """)
     return box
 
 
@@ -151,6 +154,21 @@ def save_defaults(d: AppDefaults) -> None:
     qs.setValue("defaults/creator_email", d.creator_email.strip())
     qs.setValue("defaults/default_mode", d.default_mode.strip())
     qs.setValue("defaults/default_output_dir", d.default_output_dir.strip())
+
+MODE_EXPLANATIONS = {
+    "human-directed-ai": (
+        "human-directed-ai: You are the main creative director. "
+        "AI is a tool you steer, while you control prompts, selection, arrangement, edits, and final output."
+    ),
+    "ai-assisted": (
+        "ai-assisted: The work is primarily human-led, but AI helps with specific parts of the workflow "
+        "such as ideation, drafting, cleanup, enhancement, or support tasks."
+    ),
+    "ai-generated": (
+        "ai-generated: The output is produced mostly by the AI system, with limited human creative intervention "
+        "beyond setup, guidance, or acceptance of results."
+    ),
+}
 
 # -----------------------------
 # UI pieces
@@ -507,8 +525,16 @@ class DefaultsPanel(QtWidgets.QWidget):
         form.addRow("Creator Name:", self.creator_name)
         form.addRow("Creator Email:", self.creator_email)
         form.addRow("Default Mode:", self.mode_combo)
+
+        self.mode_help = QtWidgets.QLabel()
+        self.mode_help.setWordWrap(True)
+        self.mode_help.setStyleSheet("opacity: 0.82; padding-top: 2px;")
+        form.addRow("", self.mode_help)
+
         form.addRow("Default Output Dir:", out_row)
         layout.addLayout(form)
+
+        self.mode_combo.currentTextChanged.connect(self._refresh_mode_help)
 
         layout.addSpacing(10)
 
@@ -532,6 +558,10 @@ class DefaultsPanel(QtWidgets.QWidget):
         idx = self.mode_combo.findText(d.default_mode)
         if idx >= 0:
             self.mode_combo.setCurrentIndex(idx)
+        self._refresh_mode_help()
+
+    def _refresh_mode_help(self) -> None:
+        self.mode_help.setText(MODE_EXPLANATIONS.get(self.mode_combo.currentText(), ""))
 
     def _browse_outdir(self) -> None:
         d = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose default output folder", self.output_dir.text() or str(Path.home()))
@@ -585,6 +615,12 @@ class ValidatePanel(QtWidgets.QWidget):
         row.addWidget(self.validate_btn)
         layout.addLayout(row)
 
+        self.selection_path_label = QtWidgets.QLabel("No file or folder selected.")
+        self.selection_path_label.setWordWrap(True)
+        self.selection_path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.selection_path_label.setStyleSheet("opacity: 0.82; padding-top: 2px;")
+        layout.addWidget(self.selection_path_label)
+
         self.results = QtWidgets.QPlainTextEdit()
         self.results.setReadOnly(True)
         self.results.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
@@ -614,9 +650,11 @@ class ValidatePanel(QtWidgets.QWidget):
         if pp.is_dir():
             self.selected_folder = str(pp)
             self.status.setText(f"Folder selected: {pp}")
+            self.selection_path_label.setText(f"Selected folder: {pp}")
         else:
             self.selected_files = [str(pp)]
             self.status.setText(f"File selected: {pp}")
+            self.selection_path_label.setText(f"Selected file: {pp}")
 
         self.validate_btn.setEnabled(True)
 
@@ -631,6 +669,10 @@ class ValidatePanel(QtWidgets.QWidget):
             self.selected_files = files
             self.selected_folder = None
             self.status.setText(f"{len(files)} file(s) selected.")
+            if len(files) == 1:
+                self.selection_path_label.setText(f"Selected file: {files[0]}")
+            else:
+                self.selection_path_label.setText("Selected files:\n" + "\n".join(files))
             self.validate_btn.setEnabled(True)
 
     def _browse_folder(self) -> None:
@@ -639,6 +681,7 @@ class ValidatePanel(QtWidgets.QWidget):
             self.selected_folder = folder
             self.selected_files = []
             self.status.setText(f"Folder selected: {folder}")
+            self.selection_path_label.setText(f"Selected folder: {folder}")
             self.validate_btn.setEnabled(True)
 
     def run_validate(self) -> None:
@@ -836,7 +879,8 @@ class ConvertMusicPanel(QtWidgets.QWidget):
         layout.addLayout(form)
         layout.addWidget(QtWidgets.QLabel("Declaration (AIFX-SDA-001):"))
         layout.addWidget(self.declaration_ack_cb)
-        layout.addWidget(self.declaration_view)
+        layout.addWidget(self.declaration_view, 0)
+        self.declaration_view.setFixedHeight(120)
 
         layout.addWidget(QtWidgets.QLabel("Prompt (optional):"))
         layout.addWidget(self.prompt_text, 1)
@@ -1220,13 +1264,19 @@ class PackAIFVPanel(QtWidgets.QWidget):
         layout.addWidget(form_wrap)
 
         self.work_title = QtWidgets.QLineEdit()
+        self.work_title.setPlaceholderText("Title (required)")
         self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
+        self.creator_name.setPlaceholderText("Creator name (required)")
         self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
+        self.creator_contact.setPlaceholderText("Creator contact / email (required)")
         self.primary_tool = QtWidgets.QLineEdit()
+        self.primary_tool.setPlaceholderText("Primary tool (required)")
         self.primary_tool_version = QtWidgets.QLineEdit()
+        self.primary_tool_version.setPlaceholderText("Primary tool version (optional)")
         self.supporting_tools = QtWidgets.QLineEdit()
         self.origin_url = QtWidgets.QLineEdit()
-        self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
+        self.origin_url.setPlaceholderText("Origin URL (optional)")
+        self.supporting_tools.setPlaceholderText("Supporting tools (optional, comma-separated, max 3)")
 
         # Do NOT force widths (it causes clipping in scroll area)
         for w in (self.work_title, self.creator_name, self.creator_contact):
@@ -1254,14 +1304,14 @@ class PackAIFVPanel(QtWidgets.QWidget):
 
 
         # Add rows
-        form.addRow("Title", self.work_title)
-        form.addRow("Creator Name", self.creator_name)
-        form.addRow("Creator Contact", self.creator_contact)
-        form.addRow("Primary Tool", self.primary_tool)
-        form.addRow("Primary Tool Version", self.primary_tool_version)
-        form.addRow("Supporting Tools", self.supporting_tools)
-        form.addRow("Origin URL", self.origin_url)
-        form.addRow("Output .aifv", out_wrap)   # ✅ add WIDGET, not layout
+        form.addRow("Title (required)", self.work_title)
+        form.addRow("Creator Name (required)", self.creator_name)
+        form.addRow("Creator Contact (required)", self.creator_contact)
+        form.addRow("Primary Tool (required)", self.primary_tool)
+        form.addRow("Primary Tool Version (optional)", self.primary_tool_version)
+        form.addRow("Supporting Tools (optional)", self.supporting_tools)
+        form.addRow("Origin URL (optional)", self.origin_url)
+        form.addRow("Output .aifv (required)", out_wrap)   # ✅ add WIDGET, not layout
 
         self.declaration_view = _declaration_view()
         self.declaration_ack_cb = QtWidgets.QCheckBox("I affirm this SDA declaration (AIFX-SDA-001).")
@@ -1540,14 +1590,18 @@ class PackAIFIPanel(QtWidgets.QWidget):
         layout.addWidget(form_wrap)
 
         self.work_title = QtWidgets.QLineEdit()
+        self.work_title.setPlaceholderText("Title (required)")
         self.creator_name = QtWidgets.QLineEdit(defaults.creator_name)
+        self.creator_name.setPlaceholderText("Creator name (required)")
         self.creator_contact = QtWidgets.QLineEdit(defaults.creator_email)
+        self.creator_contact.setPlaceholderText("Creator contact / email (required)")
         self.primary_tool = QtWidgets.QLineEdit()
+        self.primary_tool.setPlaceholderText("Primary tool (required)")
         self.supporting_tools = QtWidgets.QLineEdit()
-        self.supporting_tools.setPlaceholderText("Optional, comma-separated (max 3)")
+        self.supporting_tools.setPlaceholderText("Supporting tools (optional, comma-separated, max 3)")
 
         self.out_path = QtWidgets.QLineEdit()
-        self.out_path.setPlaceholderText("Output .aifi path (e.g., ~/Desktop/MyImage.aifi)")
+        self.out_path.setPlaceholderText("Output .aifi path (required, e.g., ~/Desktop/MyImage.aifi)")
         self.out_btn = QtWidgets.QPushButton("Browse…")
         self.out_btn.clicked.connect(self._browse_out)
 
@@ -1563,12 +1617,12 @@ class PackAIFIPanel(QtWidgets.QWidget):
         ):
             w.setMinimumHeight(34)
 
-        form.addRow("Title", self.work_title)
-        form.addRow("Creator Name", self.creator_name)
-        form.addRow("Creator Contact", self.creator_contact)
-        form.addRow("Primary Tool", self.primary_tool)
-        form.addRow("Supporting Tools", self.supporting_tools)
-        form.addRow("Output .aifi", out_row)
+        form.addRow("Title (required)", self.work_title)
+        form.addRow("Creator Name (required)", self.creator_name)
+        form.addRow("Creator Contact (required)", self.creator_contact)
+        form.addRow("Primary Tool (required)", self.primary_tool)
+        form.addRow("Supporting Tools (optional)", self.supporting_tools)
+        form.addRow("Output .aifi (required)", out_row)
 
         # Lock wrapper height AFTER rows exist
         form_wrap.setFixedHeight(form_wrap.sizeHint().height() + 2)
@@ -1880,15 +1934,15 @@ class MainWindow(QtWidgets.QMainWindow):
         sidebar.setObjectName("Sidebar")
         sidebar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         sidebar.setStyleSheet("""
-        #Sidebar {{
+        #Sidebar {
             background: rgba(20, 24, 33, 0.34);
             border: 1px solid rgba(255,255,255,0.20);
             border-radius: 14px;
-        }}
-        #Sidebar QLabel {{
+        }
+        #Sidebar QLabel {
             background: transparent;
             color: rgba(248, 250, 255, 0.95);
-        }}
+        }
         """)
         sidebar.setMinimumWidth(140)
         sidebar.setMaximumWidth(180)

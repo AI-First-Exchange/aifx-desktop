@@ -1,63 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-APP_PATH="dist/AIFX Desktop.app"
-RW_DMG="dist/AIFX Desktop-rw.dmg"
+APP_NAME="AIFX Desktop.app"
+VOL_NAME="AIFX Desktop Installer"
+APP_PATH="dist/$APP_NAME"
 FINAL_DMG="dist/AIFX Desktop.dmg"
+DMG_SRC_DIR="build/dmg_src"
 
-[[ -d "$APP_PATH" ]] || { echo "Missing app: $APP_PATH"; exit 1; }
-
-# background source (prefer DMG-specific)
-if [[ -f "ui/desktop/assets/AIFX_dmg.png" ]]; then
-  DMG_BG_SRC="ui/desktop/assets/AIFX_dmg.png"
-elif [[ -f "ui/desktop/assets/aifxbackground.png" ]]; then
-  DMG_BG_SRC="ui/desktop/assets/aifxbackground.png"
-else
-  echo "Missing background image (AIFX_dmg.png preferred)."
-  exit 1
+BG_SRC="ui/desktop/assets/AIFX_dmg.png"
+if [[ ! -f "$BG_SRC" ]]; then
+  BG_SRC="ui/desktop/assets/aifxbackground.png"
 fi
+VOL_ICON_SRC="ui/desktop/assets/aifx_dmg.icns"
 
-VOLUME_ICON_SRC="ui/desktop/assets/aifx_dmg.icns"
-[[ -f "$VOLUME_ICON_SRC" ]] || { echo "Missing volume icon: $VOLUME_ICON_SRC"; exit 1; }
+[[ -d "$APP_PATH" ]] || { echo "Missing app bundle: $APP_PATH" >&2; exit 1; }
+[[ -f "$BG_SRC" ]] || { echo "Missing DMG background image in ui/desktop/assets" >&2; exit 1; }
+[[ -f "$VOL_ICON_SRC" ]] || { echo "Missing DMG volume icon: $VOL_ICON_SRC" >&2; exit 1; }
+command -v create-dmg >/dev/null || { echo "Missing required tool: create-dmg" >&2; exit 1; }
 
-rm -f "$RW_DMG" "$FINAL_DMG"
+rm -f "$FINAL_DMG"
+rm -rf "$DMG_SRC_DIR"
+mkdir -p "$DMG_SRC_DIR"
+cp -R "$APP_PATH" "$DMG_SRC_DIR/$APP_NAME"
 
-# detach stale mounts
-for v in "/Volumes/AIFX Desktop" "/Volumes/AIFX Desktop 1" "/Volumes/AIFX Desktop 2"; do
-  hdiutil detach "$v" 2>/dev/null || true
-done
+create-dmg \
+  --volname "$VOL_NAME" \
+  --volicon "$VOL_ICON_SRC" \
+  --background "$BG_SRC" \
+  --window-pos 140 120 \
+  --window-size 760 460 \
+  --icon-size 128 \
+  --text-size 14 \
+  --icon "$APP_NAME" 180 230 \
+  --hide-extension "$APP_NAME" \
+  --app-drop-link 520 230 \
+  --format UDZO \
+  "$FINAL_DMG" \
+  "$DMG_SRC_DIR"
 
-echo "Creating RW DMG..."
-hdiutil create -volname "AIFX Desktop" -srcfolder "$APP_PATH" -ov -format UDRW "$RW_DMG" >/dev/null
-
-echo "Attaching..."
-ATTACH_OUT="$(hdiutil attach "$RW_DMG" -nobrowse)"
-MOUNT="$(echo "$ATTACH_OUT" | sed -n 's|.*\(/Volumes/.*\)$|\1|p' | head -n 1)"
-[[ -n "$MOUNT" ]] || { echo "Could not determine mountpoint."; echo "$ATTACH_OUT"; exit 1; }
-echo "Mounted at: $MOUNT"
-
-# add Applications link
-ln -sf /Applications "$MOUNT/Applications"
-
-# add background + volume icon (no SetFile / no osascript)
-mkdir -p "$MOUNT/.background"
-cp "$DMG_BG_SRC" "$MOUNT/.background/background.png"
-cp "$VOLUME_ICON_SRC" "$MOUNT/.VolumeIcon.icns"
-
-sync || true
-
-echo "Detaching..."
-for _ in 1 2 3 4 5; do
-  if hdiutil detach "$MOUNT" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.7
-done
-
-echo "Converting to compressed DMG..."
-hdiutil convert "$RW_DMG" -format UDZO -ov -o "$FINAL_DMG" >/dev/null
-
-echo "✅ DMG created: $FINAL_DMG"
+echo "Created: $FINAL_DMG"
