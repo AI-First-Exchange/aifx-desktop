@@ -1878,6 +1878,11 @@ class MainWindow(QtWidgets.QMainWindow):
             border: 1px solid rgba(255, 255, 255, 0.10);
         }
 
+        QLabel {
+            color: rgba(248, 250, 255, 0.96);
+            background: transparent;
+        }
+
         QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
             min-height: 30px;
             padding: 4px 10px;
@@ -1893,6 +1898,28 @@ class MainWindow(QtWidgets.QMainWindow):
         QCheckBox {
             color: rgba(248, 250, 255, 0.95);
             spacing: 8px;
+        }
+        QCheckBox::indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            background: rgba(20, 24, 31, 0.55);
+        }
+
+        QCheckBox::indicator:hover {
+            border: 1px solid rgba(255, 255, 255, 0.70);
+            background: rgba(28, 34, 46, 0.68);
+        }
+
+        QCheckBox::indicator:checked {
+            border: 1px solid rgba(170, 208, 255, 0.95);
+            background: rgba(140, 180, 255, 0.85);
+        }
+
+        QCheckBox::indicator:disabled {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.08);
         }
         QMenu {
             background: rgba(24, 26, 34, 0.96);
