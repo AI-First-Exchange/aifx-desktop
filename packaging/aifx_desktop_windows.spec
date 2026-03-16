@@ -1,18 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import os
+from pathlib import Path
 
-PROJECT_ROOT = os.environ.get("AIFX_PROJECT_ROOT", os.getcwd())
+project_root = Path(SPECPATH).resolve().parent
+icon_path = project_root / "assets" / "icon" / "AIFX_Player.ico"
 
-ICON_PATH = os.path.join(PROJECT_ROOT, "ui", "desktop", "assets", "AIFX.ico")
-ASSETS_PATH = os.path.join(PROJECT_ROOT, "ui", "desktop", "assets")
-ENTRY_SCRIPT = os.path.join(PROJECT_ROOT, "ui", "desktop", "app.py")
-
-analysis = Analysis(
-    [ENTRY_SCRIPT],
-    pathex=[PROJECT_ROOT],
+a = Analysis(
+    [str(project_root / "ui" / "player" / "app.py")],
+    pathex=[str(project_root)],
     binaries=[],
-    datas=[(ASSETS_PATH, "ui/desktop/assets")],
+    datas=[(str(project_root / "assets"), "assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -21,30 +18,21 @@ analysis = Analysis(
     noarchive=False,
     optimize=0,
 )
-
-pyz = PYZ(analysis.pure)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
-    analysis.scripts,
+    a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name="AIFX Desktop",
+    name="AIFX Player",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
+    upx=True,
     console=False,
     disable_windowed_traceback=False,
-    icon=ICON_PATH,
-)
-
-collect = COLLECT(
-    exe,
-    analysis.binaries,
-    analysis.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="AIFX Desktop",
+    argv_emulation=False,
+    icon=str(icon_path),
 )
