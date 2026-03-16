@@ -1,5 +1,5 @@
-﻿#define MyAppName "AIFX Desktop"
-#define MyAppVersion "0.3"
+#define MyAppName "AIFX Desktop"
+#define MyAppVersion "0.4.0"
 #define MyAppPublisher "AI-First-Exchange"
 #define MyAppExeName "AIFX Desktop.exe"
 
@@ -11,8 +11,10 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=AIFX-Desktop-Setup
+OutputBaseFilename=AIFX-Desktop-Windows-x64
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
