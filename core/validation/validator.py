@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Any
+from core.aifp.naming import detect_package_kind
+from core.validation.aifp_validator import validate_aifp
 from core.validation.aifv_validator import validate_aifv
 import json
 import zipfile
@@ -149,12 +151,17 @@ def validate_aifx_package(
             results["checks"]["manifest"] = "ok"
 
             # --- Format-specific rules ---
-            ext = package_path.suffix.lower()
-            if ext == ".aifv":
+            package_kind = detect_package_kind(package_path)
+            if package_kind == "aifv":
                 aifv_checks, aifv_errors, aifv_warnings = validate_aifv(z, manifest)
                 results["checks"].update(aifv_checks)
                 results["errors"].extend(aifv_errors)
                 results["warnings"].extend(aifv_warnings)
+            elif package_kind == "aifp":
+                aifp_checks, aifp_errors, aifp_warnings = validate_aifp(z, manifest)
+                results["checks"].update(aifp_checks)
+                results["errors"].extend(aifp_errors)
+                results["warnings"].extend(aifp_warnings)
 
             # --- Basic version ---
             aifx_version = _get_aifx_version(manifest)
@@ -166,7 +173,6 @@ def validate_aifx_package(
             creator_name = (creator.get("name") or "").strip() if isinstance(creator, dict) else ""
             creator_contact = (creator.get("contact") or "").strip() if isinstance(creator, dict) else ""
 
-            # --- AIFM REQUIRED IDENTITY ---
             work = manifest.get("work") or {}
             title = (work.get("title") or "").strip() if isinstance(work, dict) else ""
 
@@ -177,13 +183,12 @@ def validate_aifx_package(
 
             author_ok = bool(author or creator_name)
             results["checks"]["author"] = author_ok
-            if not author_ok:
+            if not author_ok and package_kind != "aifp":
                 results["errors"].append("author missing (expected 'author' or 'creator.name')")
 
-            # Contact anchor (your canon rule)
             contact_ok = bool(creator_contact)
             results["checks"]["contact"] = contact_ok
-            if not contact_ok:
+            if not contact_ok and package_kind != "aifp":
                 results["errors"].append("creator.contact missing (email required)")
 
             # --- AI declaration ---
