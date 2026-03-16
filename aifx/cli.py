@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 # --- project ---
+from core.aifp.naming import is_aifx_package_path
 from core.packaging.aifi_packager import build_aifi
 from core.packaging.aifm_packager import build_aifm
 from core.packaging.aifv_packager import build_aifv
@@ -21,7 +22,7 @@ def _iter_packages(path: Path) -> list[Path]:
         return [path]
     pkgs: list[Path] = []
     for p in path.rglob("*"):
-        if p.is_file() and p.suffix.lower() in AIFX_EXTS:
+        if p.is_file() and is_aifx_package_path(p):
             pkgs.append(p)
     return sorted(pkgs)
 

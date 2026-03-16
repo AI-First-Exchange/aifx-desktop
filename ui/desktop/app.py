@@ -12,9 +12,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
+from core.aifp.naming import is_aifx_package_path
 from core.packaging.aifi_packager import build_aifi
 from core.packaging.aifv_packager import build_aifv
 from core.provenance.sda_templates import AIFX_SDA_001_TEXT
+from ui.desktop.aifp_panel import AIFPPanel
 from ui.desktop.validator_bridge import validate_package_local
 
 # -----------------------------
@@ -94,13 +96,13 @@ def collect_packages(selected_files: list[str], selected_folder: str | None = No
     files: list[str] = []
 
     for p in selected_files or []:
-        if p.lower().endswith(AIFX_PACKAGE_EXTS) and os.path.isfile(p):
+        if is_aifx_package_path(p) and os.path.isfile(p):
             files.append(_abs(p))
 
     if selected_folder:
         for root, _, names in os.walk(selected_folder):
             for name in names:
-                if name.lower().endswith(AIFX_PACKAGE_EXTS):
+                if is_aifx_package_path(name):
                     fp = os.path.join(root, name)
                     if os.path.isfile(fp):
                         files.append(_abs(fp))
@@ -595,7 +597,7 @@ class ValidatePanel(QtWidgets.QWidget):
         title.setStyleSheet("font-size: 16px; font-weight: 800;")
         layout.addWidget(title)
 
-        self.drop = DropZone("Drop .aifm/.aifv/.aifi/.aifp (or .aifx) here\n(or use Browse)")
+        self.drop = DropZone("Drop .aifm/.aifv/.aifi/.aifp/.aifp-* (or .aifx) here\n(or use Browse)")
         self.drop.pathDropped.connect(self._on_drop)
         layout.addWidget(self.drop)
 
@@ -663,7 +665,7 @@ class ValidatePanel(QtWidgets.QWidget):
             self,
             "Select AIFX package(s)",
             "",
-            "AIFX Packages (*.aifx *.aifm *.aifv *.aifi *.aifp)",
+            "AIFX Packages (*.aifx *.aifm *.aifv *.aifi *.aifp *.aifp-*);;All files (*)",
         )
         if files:
             self.selected_files = files
@@ -2021,10 +2023,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.page_video = PackAIFVPanel(defaults)
         self.page_image = PackAIFIPanel(defaults)
 
-        self.page_project = PlaceholderPanel(
-            "Convert → Project",
-            "Not implemented yet. AIFP packaging rules need design (entry point, include/exclude).",
-        )
+        self.page_project = AIFPPanel(defaults)
 
         self.pages.addWidget(self.page_home)      # 0
         self.pages.addWidget(self.page_defaults)  # 1
@@ -2120,6 +2119,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.page_defaults.defaultsSaved.connect(self.page_music.reload_defaults)
         self.page_defaults.defaultsSaved.connect(self.page_video.reload_defaults)
         self.page_defaults.defaultsSaved.connect(self.page_image.reload_defaults)
+        self.page_defaults.defaultsSaved.connect(self.page_project.reload_defaults)
         
         # Landing
         self._go(0, self.btn_home)
