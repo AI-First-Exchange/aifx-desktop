@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -70,6 +71,19 @@ def _abs(p: str) -> str:
 def resource_path(rel_path: str) -> str:
     base = Path(getattr(sys, "_MEIPASS")) if hasattr(sys, "_MEIPASS") else REPO_ROOT
     return str((base / rel_path).resolve())
+
+
+def checkbox_checkmark_path() -> str:
+    path = Path(tempfile.gettempdir()) / "aifx_checkbox_checkmark.svg"
+    if not path.exists():
+        path.write_text(
+            """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+<path d="M3 8.5L6.3 11.8L13 5.2" fill="none" stroke="#f8fbff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+""",
+            encoding="utf-8",
+        )
+    return str(path)
 
 
 def _declaration_view() -> QtWidgets.QLabel:
@@ -505,7 +519,31 @@ class DefaultsPanel(QtWidgets.QWidget):
         self.creator_email = QtWidgets.QLineEdit()
 
         self.mode_combo = QtWidgets.QComboBox()
-        self.mode_combo.addItems(["human-directed-ai", "ai-assisted", "ai-generated"])
+        for mode_key, description in MODE_EXPLANATIONS.items():
+            self.mode_combo.addItem(mode_key, description)
+        mode_view = QtWidgets.QListView(self.mode_combo)
+        mode_view.setWordWrap(False)
+        mode_view.setTextElideMode(QtCore.Qt.ElideRight)
+        if hasattr(mode_view, "setUniformItemSizes"):
+            mode_view.setUniformItemSizes(True)
+        mode_view.setMinimumWidth(220)
+        mode_view.setStyleSheet("""
+            QListView {
+                background-color: #000000;
+                color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.20);
+                outline: 0;
+            }
+            QListView::item {
+                padding: 6px 10px;
+                min-height: 24px;
+            }
+            QListView::item:selected {
+                background-color: rgba(80, 120, 200, 0.60);
+                color: #ffffff;
+            }
+        """)
+        self.mode_combo.setView(mode_view)
 
         self.output_dir = QtWidgets.QLineEdit()
         
@@ -563,7 +601,10 @@ class DefaultsPanel(QtWidgets.QWidget):
         self._refresh_mode_help()
 
     def _refresh_mode_help(self) -> None:
-        self.mode_help.setText(MODE_EXPLANATIONS.get(self.mode_combo.currentText(), ""))
+        description = self.mode_combo.currentData()
+        if description is None:
+            description = MODE_EXPLANATIONS.get(self.mode_combo.currentText(), "")
+        self.mode_help.setText(str(description))
 
     def _browse_outdir(self) -> None:
         d = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose default output folder", self.output_dir.text() or str(Path.home()))
@@ -1857,7 +1898,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setWindowTitle("AIFX Desktop (v0) — Converter + Validator")
         self.resize(980, 640)
-        self.setStyleSheet("""
+        checkmark_url = checkbox_checkmark_path().replace("\\", "/")
+        stylesheet = """
         QPushButton {
             min-height: 32px;
             padding: 6px 12px;
@@ -1897,6 +1939,17 @@ class MainWindow(QtWidgets.QMainWindow):
             border: 1px solid rgba(170, 208, 255, 0.88);
             background: rgba(22, 26, 34, 0.50);
         }
+        QComboBox QAbstractItemView {
+            background-color: #000000;
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.20);
+            selection-background-color: rgba(80, 120, 200, 0.60);
+            selection-color: #ffffff;
+        }
+        QComboBox QAbstractItemView::item {
+            padding: 6px 10px;
+            min-height: 24px;
+        }
         QCheckBox {
             color: rgba(248, 250, 255, 0.95);
             spacing: 8px;
@@ -1905,18 +1958,24 @@ class MainWindow(QtWidgets.QMainWindow):
             width: 16px;
             height: 16px;
             border-radius: 4px;
-            border: 1px solid rgba(255, 255, 255, 0.45);
-            background: rgba(20, 24, 31, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            background: rgba(12, 15, 20, 0.92);
+        }
+
+        QCheckBox::indicator:unchecked {
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            background: rgba(12, 15, 20, 0.92);
         }
 
         QCheckBox::indicator:hover {
-            border: 1px solid rgba(255, 255, 255, 0.70);
-            background: rgba(28, 34, 46, 0.68);
+            border: 1px solid rgba(255, 255, 255, 0.90);
+            background: rgba(20, 24, 31, 0.96);
         }
 
         QCheckBox::indicator:checked {
             border: 1px solid rgba(170, 208, 255, 0.95);
-            background: rgba(140, 180, 255, 0.85);
+            background: rgba(42, 58, 82, 0.88);
+            image: url(__CHECKMARK_URL__);
         }
 
         QCheckBox::indicator:disabled {
@@ -1937,7 +1996,8 @@ class MainWindow(QtWidgets.QMainWindow):
         QMenu::item:selected {
             background: rgba(255,255,255,0.14);
         }
-        """)
+        """
+        self.setStyleSheet(stylesheet.replace("__CHECKMARK_URL__", checkmark_url))
 
         central = QtWidgets.QWidget()
         central.setObjectName("Central")
